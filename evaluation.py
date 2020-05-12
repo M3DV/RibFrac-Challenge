@@ -1,26 +1,9 @@
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 from skimage.measure import label, regionprops
+from sklearn.metrics import auc
 from tqdm import tqdm
-
-
-def _distance(p1, p2):
-    """
-    Return the Euclidean distance between two points.
-
-    Parameters
-    ----------
-    p1, p2 : numpy.ndarray
-        The numpy array of point coordinates.
-
-    Returns
-    -------
-    dist : scalar
-        The distance between p1 and p2.
-    """
-    dist = np.linalg.norm(p1 - p2)
-
-    return dist
 
 
 def _compile_pred_metrics(iou_matrix, inter_matrix, pred, pred_label):
@@ -128,33 +111,6 @@ def evaluate_single_prediction(pred, gt_label, threshold):
     return pred_metrics
 
 
-def evaluate(pred_iter, gt_iter, threshold=0.1):
-    """
-    Evaluate predictions against the ground-truth.
-
-    Parameters
-    ----------
-    pred_iter : sequence or iterable of numpy.ndarray
-        An iterator or sequence of numpy array containing predictions.
-    gt_iter : sequence or iterable of numpy.ndarray
-        An iterator or sequence of numpy array containing ground-truths.
-
-    Returns
-    -------
-    eval_results : list of pandas.DataFrame
-        Evaluation results for each prediction.
-    """
-    assert len(pred_iter) == len(gt_iter),\
-        "Unequal number of predictions and ground-truths."
-
-    eval_results = []
-    for i in tqdm(range(len(gt_iter))):
-        eval_results.append(evaluate_single_prediction(pred_iter[i],
-            gt_iter[i], threshold))
-
-    return eval_results
-
-
 def _froc_single_thresh(df_list, p_thresh, iou_thresh):
     """
     Calculate the FROC for a single confidence threshold.
@@ -212,10 +168,67 @@ def froc(df_list, iou_thresh=0):
         List of false positive rate for a range of threshold from 0 to 1.
     recall : float
         List of recall rate for a range of threshold from 0 to 1.
+    aufroc : float
+        Area under FROC curve. Range from 0 to 1.
     """
     fpr_recall = [_froc_single_thresh(df_list, p_thresh, iou_thresh)
         for p_thresh in np.arange(0, 1, 0.01)]
     fpr = [x[0] for x in fpr_recall]
     recall = [x[1] for x in fpr_recall]
+    aufroc = auc(fpr, recall) / max(fpr)
 
-    return fpr, recall
+    return fpr, recall, aufroc
+
+
+def plot_froc(fpr, recall, aufroc):
+    """
+    Plot the FROC curve.
+
+    Parameters
+    ----------
+    fpr : list of float
+        List of false positive rates at different confidence thresholds.
+    recall : list of float
+        List of recall at different confidence thresholds.
+    """
+    _, ax = plt.subplots()
+    ax.plot(fpr, recall)
+    ax.set_title("FROC")
+    ax.legend([f"AUFROC={aufroc:.4f}"])
+    plt.show()
+
+
+def evaluate(pred_iter, gt_iter, threshold=0.1):
+    """
+    Evaluate predictions against the ground-truth.
+
+    Parameters
+    ----------
+    pred_iter : sequence or iterable of numpy.ndarray
+        An iterator or sequence of numpy array containing predictions.
+    gt_iter : sequence or iterable of numpy.ndarray
+        An iterator or sequence of numpy array containing ground-truths.
+
+    Returns
+    -------
+    eval_results : list of pandas.DataFrame
+        Evaluation results for each prediction.
+    fpr : list of float
+        List of false positive rate for a range of threshold from 0 to 1.
+    recall : float
+        List of recall rate for a range of threshold from 0 to 1.
+    aufroc : float
+        Area under FROC curve. Range from 0 to 1.
+    """
+    assert len(pred_iter) == len(gt_iter),\
+        "Unequal number of predictions and ground-truths."
+
+    eval_results = []
+    for i in tqdm(range(len(gt_iter))):
+        eval_results.append(evaluate_single_prediction(pred_iter[i],
+            gt_iter[i], threshold))
+
+    fpr, recall, aufroc = froc(eval_results)
+    plot_froc(fpr, recall, aufroc)
+
+    return eval_results, fpr, recall, aufroc
