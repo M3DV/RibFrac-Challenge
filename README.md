@@ -52,5 +52,5 @@ from evaluation import evaluate
 pred_iter = MyArrayGenerator(pred_dir)
 gt_iter = MyArrayGenerator(gt_dir)
 
-evaluate(pred_iter, gt_iter)
+eval_results, fpr, recall, aufroc = evaluate(pred_iter, gt_iter)
 ```
