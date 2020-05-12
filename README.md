@@ -43,4 +43,14 @@ class MyArrayGenerator(BaseArrayGenerator):
         return np.load(self.file_list[idx])
 ```
 
-Once your array generator is prepared, you can evaluate your model output using ```evaluation.evaluate```. This function will return the evaluation results for each prediction, plot the FROC curve and calculate the AUFROC score.
+Once your array generator is prepared, you can evaluate your model output using ```evaluation.evaluate```. This function will return the evaluation results for each prediction, plot the FROC curve and calculate the AUFROC score:
+```python
+# pseudo code
+from evaluation import evaluate
+
+
+pred_iter = MyArrayGenerator(pred_dir)
+gt_iter = MyArrayGenerator(gt_dir)
+
+evaluate(pred_iter, gt_iter)
+```
