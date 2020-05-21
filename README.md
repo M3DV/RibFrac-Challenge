@@ -21,7 +21,7 @@ To decompress the competition data, run the following command line:
 ```bash
 python -m ribfrac.decompression --data_dir <custom/data/directory>
 ```
-You need to specify the target data directory of your choice in argument ```data_dir```. This data directory will be written in ribfrac/environ.py, and can be accessed later once the package is installed.
+You need to specify the target data directory of your choice in argument ```data_dir```. This data directory will be written in ribfrac/environ.py, and can be accessed later once the package is installed. The decompression process takes 1.5-2 hours , and the decompressed data (train & val) should take up 277 GB.
 
 The content structure of the decompressed data is as follows:
 ```
