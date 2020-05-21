@@ -1,9 +1,16 @@
+import os
+
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from skimage.measure import label, regionprops
 from sklearn.metrics import auc
 from tqdm import tqdm
+
+from .environ import DATA_DIR
+from .nii_dataset import NiiDataset
+
+__all__ = ["froc", "plot_froc", "evaluate"]
 
 
 def _compile_pred_metrics(iou_matrix, inter_matrix, pred, pred_label):
@@ -198,16 +205,18 @@ def plot_froc(fpr, recall, aufroc):
     plt.show()
 
 
-def evaluate(pred_iter, gt_iter, threshold=0.1):
+def evaluate(pred_dir, subset, threshold=0):
     """
-    Evaluate predictions against the ground-truth.
+    Evaluate predictions against the ground-truth on a certain subset.
 
     Parameters
     ----------
-    pred_iter : sequence or iterable of numpy.ndarray
-        An iterator or sequence of numpy array containing predictions.
-    gt_iter : sequence or iterable of numpy.ndarray
-        An iterator or sequence of numpy array containing ground-truths.
+    pred_dir : str
+        The directory where all prediction .nii files exist.
+    subset : str, {"train", "val"}
+        Data subset for evaluation.
+    threshold : float
+        The probability threshold of a positive prediction.
 
     Returns
     -------
@@ -220,6 +229,10 @@ def evaluate(pred_iter, gt_iter, threshold=0.1):
     aufroc : float
         Area under FROC curve. Range from 0 to 1.
     """
+    pred_iter = NiiDataset(pred_dir)
+    gt_dir = os.path.join(DATA_DIR, "labels", subset)
+    gt_iter = NiiDataset(gt_dir)
+
     assert len(pred_iter) == len(gt_iter),\
         "Unequal number of predictions and ground-truths."
 
@@ -232,3 +245,16 @@ def evaluate(pred_iter, gt_iter, threshold=0.1):
     plot_froc(fpr, recall, aufroc)
 
     return eval_results, fpr, recall, aufroc
+
+
+if __name__ == "__main__":
+    import argparse
+
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pred_dir", "Prediction .nii directory.")
+    parser.add_argument("--subset", "Data subset to run evaluation.")
+    args = parser.parse_args()
+
+    _, _, _, aufroc = evaluate(args.pred_dir, args.subset)
+    print(f"Evaluation on {args.subset}: AUFROC={aufroc:.4f}")

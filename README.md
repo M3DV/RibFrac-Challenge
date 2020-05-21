@@ -1,80 +1,71 @@
 # RibFrac-Challenge
+
 Setup and evaluation scripts for Rib Fracture Detection and Classification Challenge (RibFrac).
 
 # Content
+
 ```
 RibFract-Challenge/
-    setup.py                    Initialize the data directory and decompress data
-    decompression.py            Functions for data decompression
-    evaluation.py               Functions for model evaluation
-    base_array_generator.py     The abstract class for volume reading
+    setup.py                        Initialize the directory, install the package and decompress data
+    ribfrac/
+        decompression.py            Functions for data decompression
+        environ.py                  Record environment variables
+        evaluation.py               Functions for model evaluation
+        nii_dataset.py              The dataset class for .nii reading
 ```
 
 # Setup
 
-## Install required packages
-With pip:
-```
-pip3 install -r requirements.txt
-```
-With Anaconda:
-```
-conda install --file requirements.txt
-```
 ## Decompress data
-To decompress all competition data, you need to specify the destination directory through command-line argument ```--data_dir```:
+To decompress the competition data, run the following command line:
+```bash
+python -m ribfrac.decompression --data_dir <custom/data/directory>
 ```
-python setup.py --data_dir <your customed data directory>
+You need to specify the target data directory of your choice in argument ```data_dir```. This data directory will be written in ribfrac/environ.py, and can be accessed later once the package is installed.
+
+The content structure of the decompressed data is as follows:
 ```
+images/
+    train/
+        train_0.nii
+        train_1.nii
+        ...
+    val/
+        val_0.nii
+        val_1.nii
+        ...
+labels/
+    train/
+        label_train_0.nii
+        label_train_1.nii
+        ...
+    val/
+        label_val_0.nii
+        label_val_1.nii
+        ...
+```
+
+## Install the RibFrac package
+To install the RibFrac package, run:
+```bash
+python setup.py install
+```
+Now you can use the evaluation function by importing ```ribfrac```.
 
 # Usage
 
 ## Evaluate model
-To evaluate your model, you first need to write your own array generator inheriting ```BaseArrayGenerator``` in ```base_array_generator.py``` and implement the ```__getitem__``` method. The ```BaseArrayGenerator``` class reads all files under ```root_dir``` and stores these paths under ```self.file_list```:
-
-```python
-class BaseArrayGenerator:
-    """
-    Abstract class of array generator. To evaluate your model predictions,
-    please inherit this class and implement the __getitem__ method. The
-    __getitem__ should return the prediction mask array corresponding to the
-    index.
-    """
-    def __init__(self, root_dir):
-        self.root_dir = root_dir
-        self.file_list = sorted([os.path.join(root_dir, x)
-            for x in os.listdir(root_dir)])
-
-    def __len__(self):
-        return len(self.file_list)
-
-    def __getitem__(self, idx):
-        raise NotImplementedError("Method __getitem__ not implemented.")
+You can evaluate your model through command line or package function.
+### Command line
+```bash
+python -m ribfrac.evaluation --pred_dir <prediction/directory> --subset <{train, val}>
 ```
-
-Your ```__getitem__``` method should take ```idx``` as argument, read the file at ```idx``` position, and return a ```numpy.ndarray``` containing 3D masks of ground-truth or prediction. For example:
-
+### Function call
 ```python
-import numpy as np
-
-from base_array_generator import BaseArrayGenerator
+import ribfrac
 
 
-class MyArrayGenerator(BaseArrayGenerator):
-
-    def __getitem__(self, idx):
-        return np.load(self.file_list[idx])
-```
-
-Once your array generator is prepared, you can evaluate your model output using ```evaluation.evaluate```. This function will return the evaluation results for each prediction, plot the FROC curve and calculate the AUFROC score:
-
-```python
-# pseudo code
-from evaluation import evaluate
-
-
-pred_iter = MyArrayGenerator(pred_dir)
-gt_iter = MyArrayGenerator(gt_dir)
-
-eval_results, fpr, recall, aufroc = evaluate(pred_iter, gt_iter)
+subset = "val"      # choose between train or val
+pred_dir = "prediction/val"
+results, fpr, recall, auc = ribfrac.evaluation.evaluate(pred_dir, subset)
 ```

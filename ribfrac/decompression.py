@@ -2,6 +2,7 @@ import gzip
 import os
 import shutil
 import zipfile
+from pathlib import Path
 
 
 def _extract_zip(src, dst):
@@ -124,6 +125,27 @@ def _create_layout(root_dir, subsets):
         _create_folder(os.path.join(root_dir, "labels", subset))
 
 
+def initialize(args):
+    """
+    Initialize the data directory.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Arguments received from command line.
+    """
+    # save the data directory in ribfrac/environ.py
+    data_dir = args.data_dir
+    with open("ribfrac/environ.py", "w") as f:
+        f.write(f'DATA_DIR = "{args.data_dir}"')
+
+    # create data_dir if it doesn't exist
+    if not os.path.exists(data_dir):
+        print(f"Data directory {data_dir} doesn't exist and is automatically"
+            " created.")
+        os.mkdir(data_dir)
+
+
 def decompress_data(src, dst):
     """
     Decompress all competition data.
@@ -139,7 +161,7 @@ def decompress_data(src, dst):
         entire repository and keep it as it originally is".format(src)
 
     # create folder layout at the destination folder
-    subset_list = ["train", "val", "test"]
+    subset_list = ["train", "val"]
     _create_layout(dst, subset_list)
 
     # extract data
@@ -155,3 +177,26 @@ def decompress_data(src, dst):
         _extract_all_gz_in_dir(subset_lbl_dst)
 
         print("Finished decompressing {}.".format(subset))
+
+
+if __name__ == "__main__":
+    import argparse
+    from time import perf_counter
+
+
+    time_beg = perf_counter()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir", type=str, help="The directory where"
+        "the decompressed data will be saved.", required=True)
+    args = parser.parse_args()
+
+    print("Set up directory...")
+    initialize(args)
+
+    print("Decompress data...")
+    raw_data_path = os.path.join(Path(__file__).parent.parent, "data")
+    decompress_data(raw_data_path, args.data_dir)
+
+    time_elapsed = int((perf_counter() - time_beg) // 60)
+    print(f"Total time elapsed： {time_elapsed} mins.")
