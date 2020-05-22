@@ -6,9 +6,9 @@ Setup and evaluation scripts for Rib Fracture Detection and Classification Chall
 
 ```
 RibFract-Challenge/
-    setup.py                        Initialize the directory, install the package and decompress data
+    setup.py                        Initialize the directory and install the package
     ribfrac/
-        decompression.py            Functions for data decompression
+        decompression.py            Data decompression
         environ.py                  Record environment variables
         evaluation.py               Functions for model evaluation
         nii_dataset.py              The dataset class for .nii reading
