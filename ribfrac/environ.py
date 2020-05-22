@@ -1,1 +1,0 @@
-DATA_DIR = "/mnt/sdb/data/rib_frac/ribfrac_challenge"
