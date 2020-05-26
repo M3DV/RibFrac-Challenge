@@ -83,6 +83,10 @@ def evaluate_single_prediction(pred, gt_label, threshold):
     pred_metrics : pandas.DataFrame
         A dataframe of prediction metrics.
     """
+    assert pred.shape == gt_label.shape,\
+        "The prediction and ground-truth have different shapes. pred:"\
+        f" {pred.shape} and gt: {gt_label.shape}."
+
     gt_label = gt_label.astype(int)
     gt_bin = gt_label > 0
 
@@ -252,8 +256,8 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pred_dir", "Prediction .nii directory.")
-    parser.add_argument("--subset", "Data subset to run evaluation.")
+    parser.add_argument("--pred_dir", required=True)
+    parser.add_argument("--subset", required=True)
     args = parser.parse_args()
 
     _, _, _, aufroc = evaluate(args.pred_dir, args.subset)

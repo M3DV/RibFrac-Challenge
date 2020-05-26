@@ -22,6 +22,6 @@ class NiiDataset:
         return len(self.file_list)
 
     def __getitem__(self, idx):
-        array = np.array(nib.load(self.file_list[idx]).get_fdata())
+        array = nib.load(self.file_list[idx]).get_fdata()
 
         return array
