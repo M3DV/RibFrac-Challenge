@@ -163,7 +163,7 @@ def _froc_single_thresh(df_list, p_thresh, iou_thresh):
     return fpr, recall
 
 
-def froc(df_list, iou_thresh=0):
+def froc(df_list, iou_thresh=0.1):
     """
     Calculate the FROC curve.
 
