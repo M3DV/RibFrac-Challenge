@@ -1,6 +1,10 @@
 # RibFrac-Challenge
 
+**Note**: due to the change of expected file stucture, we are factoring the code. Please check the code later.
+
 Setup and evaluation scripts for Rib Fracture Detection and Classification Challenge (RibFrac).
+
+
 
 # Content
 
