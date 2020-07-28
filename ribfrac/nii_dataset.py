@@ -24,4 +24,5 @@ class NiiDataset:
     def __getitem__(self, idx):
         array = nib.load(self.file_list[idx]).get_fdata()
 
-        return array
+        return array, os.path.splitext(os.path.basename(
+            self.file_list[idx]))[0]

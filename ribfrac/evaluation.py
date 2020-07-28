@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 import pandas as pd
@@ -7,13 +8,42 @@ from skimage.measure import label, regionprops
 from sklearn.metrics import auc
 from tqdm import tqdm
 
-from .environ import DATA_DIR
 from .nii_dataset import NiiDataset
 
 __all__ = ["froc", "plot_froc", "evaluate"]
 
 
-def _compile_pred_metrics(iou_matrix, inter_matrix, pred, pred_label):
+clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental",
+    "FP", "Ignore"]
+clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"]
+
+
+def _get_clf_result(x):
+    if not pd.isna(x["gt_class"]):
+        return x["gt_class"]
+    elif x["hit_label"] != 0:
+        return "Ignore"
+    else:
+        return "FP"
+
+
+def _get_clf_confusion_matrix(gt_info, pred_metrics):
+    conf_mat = pd.DataFrame(np.zeros((len(clf_conf_mat_rows),
+        len(clf_conf_mat_cols))), index=clf_conf_mat_rows,
+        columns=clf_conf_mat_cols)
+    for i in range(len(pred_metrics)):
+        gt_class = pred_metrics.gt_class[i]
+        pred_class = pred_metrics.pred_class[i]
+        conf_mat.loc[pred_class, gt_class] += 1
+    
+    for i in range(len(gt_info)):
+        if gt_info.label_index[i] not in pred_metrics.hit_label.tolist():
+            conf_mat.loc["FN", gt_info["class"][i]] += 1
+    
+    return conf_mat
+
+
+def _compile_pred_metrics(iou_matrix, inter_matrix, gt_info, pred_info):
     """
     Compile prediction metrics into a Pandas DataFrame
 
@@ -23,10 +53,10 @@ def _compile_pred_metrics(iou_matrix, inter_matrix, pred, pred_label):
         IoU array with shape of (n_pred, n_gt).
     inter_matrix : numpy.ndarray
         Intersection array with shape of (n_pred, n_gt).
-    pred : numpy.ndarray
-        A numpy array of probability prediction for each voxel.
-    pred_label : numpy.ndarray
-        A numpy array containing n GTs labelled from 1 to n.
+    gt_info : pandas.DataFrame
+        DataFrame containing GT information.
+    pred_info : pandas.DataFrame
+        DataFrame containing prediction information.
 
     Returns
     -------
@@ -37,62 +67,63 @@ def _compile_pred_metrics(iou_matrix, inter_matrix, pred, pred_label):
     # pred_label --  The index of prediction
     # max_iou -- The highest IoU this prediction has with any certain GT
     # hit_label -- The GT label with which this prediction has the highest IoU
-    # intersect_vox -- Number of voxels contained in the intersection between
-    #     this prediction and its hit GT
     # prob -- The confidence prediction of this prediction
-    # vol -- This prediction's volume in pixels
-    # z, y, x -- Coordinates of this prediction's centroid
+    # pred_class -- The classification prediction
+    # gt_class -- The ground-truth prediction
     # num_gt -- Total number of GT in this volume
-    pred_metrics = pd.DataFrame(np.zeros((iou_matrix.shape[0], 9)),
-        columns=["pred_label", "max_iou", "hit_label", "intersect_vox",
-        "prob", "vol", "z", "y", "x"])
+    pred_metrics = pd.DataFrame(np.zeros((iou_matrix.shape[0], 4)),
+        columns=["pred_label", "max_iou", "hit_label", "prob"])
     pred_metrics["pred_label"] = np.arange(1, iou_matrix.shape[0] + 1)
     pred_metrics["max_iou"] = iou_matrix.max(axis=1)
     pred_metrics["hit_label"] = iou_matrix.argmax(axis=1) + 1
-    pred_metrics["intersect_vox"] = np.choose(iou_matrix.argmax(axis=1),
-        inter_matrix.T)
     # if max_iou == 0, this prediction doesn't hit any GT
     pred_metrics["hit_label"] = pred_metrics.apply(lambda x: x["hit_label"]
         if x["max_iou"] > 0 else 0, axis=1)
-    region_props = regionprops(pred_label, pred)
-    pred_metrics["prob"] = [prop.mean_intensity for prop in region_props]
-    pred_metrics["vol"] = [prop.area for prop in region_props]
-    pred_metrics[["z", "y", "x"]] = np.array([prop.centroid
-        for prop in region_props])
+    pred_metrics["prob"] = pred_info.sort_values("label_index")\
+        ["probs"].values
+    pred_metrics["pred_class"] = pred_info.sort_values("label_index")\
+        ["class"].values
+    pred_metrics = pred_metrics.merge(gt_info[["label_index", "class"]],
+        how="left", left_on="hit_label", right_on="label_index")
+    pred_metrics.rename({"class": "gt_class"}, axis=1, inplace=True)
+    pred_metrics.drop("label_index", axis=1, inplace=True)
+    pred_metrics["gt_class"] = pred_metrics.apply(_get_clf_result, axis=1)
+
     pred_metrics["num_gt"] = iou_matrix.shape[1]
 
-    return pred_metrics
+    clf_conf_mat = _get_clf_confusion_matrix(gt_info, pred_metrics)
+
+    return pred_metrics, clf_conf_mat
 
 
-def evaluate_single_prediction(pred, gt_label, threshold):
+def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
     """
     Evaluate a single prediction.
 
     Parameters
     ----------
-    pred : numpy.ndarray
-        The numpy array of prediction.
     gt_label : numpy.ndarray
-        The numpy array of ground-truth.
-    threshold : float
-        If a voxel's prediction probability is higher than threshold,
-        it is treated as a positive prediction
+        The numpy array of ground-truth labelled from 1 to n.
+    pred_label : numpy.ndarray
+        The numpy array of prediction labelled from 1 to n.
+    gt_info : pandas.DataFrame
+        DataFrame containing GT information.
+    pred_info : pandas.DataFrame
+        DataFrame containing prediction information.
 
     Returns
     -------
     pred_metrics : pandas.DataFrame
         A dataframe of prediction metrics.
     """
-    assert pred.shape == gt_label.shape,\
-        "The prediction and ground-truth have different shapes. pred:"\
-        f" {pred.shape} and gt: {gt_label.shape}."
+    gt_label = gt_label.astype(np.uint8)
+    pred_label = pred_label.astype(np.uint8)
+    assert gt_label.shape == pred_label.shape,\
+        "The prediction and ground-truth have different shapes. gt:"\
+        f" {gt_label.shape} and pred: {pred_label.shape}."
 
-    gt_label = gt_label.astype(int)
-    gt_bin = gt_label > 0
-
-    # Label connected regions
-    pred_bin = pred > threshold
-    pred_label = label(pred_bin)
+    gt_bin = (gt_label > 0).astype(np.uint8)
+    pred_bin = (pred_label > 0).astype(np.uint8)
 
     num_gt = int(gt_label.max())
     num_pred = int(pred_label.max())
@@ -116,10 +147,10 @@ def evaluate_single_prediction(pred, gt_label, threshold):
 
     iou_matrix = iou_matrix.T
     inter_matrix = inter_matrix.T
-    pred_metrics = _compile_pred_metrics(iou_matrix, inter_matrix, pred,
-        pred_label)
+    pred_metrics, clf_conf_mat = _compile_pred_metrics(iou_matrix,
+        inter_matrix, gt_info, pred_info)
 
-    return pred_metrics
+    return pred_metrics, clf_conf_mat
 
 
 def _froc_single_thresh(df_list, p_thresh, iou_thresh):
@@ -144,26 +175,48 @@ def _froc_single_thresh(df_list, p_thresh, iou_thresh):
     """
     EPS = 1e-8
 
-    total_gt = total_tp = total_fp = 0
-    for df in df_list:
-        if len(df) != 0:
-            gt_cnt = df["num_gt"][0]
-            df = df[df["prob"] >= p_thresh]
-            tp_cnt = len(df.loc[df["max_iou"] > iou_thresh,
-                "hit_label"].unique())
-            fp_cnt = len(df) - len(df.loc[df["max_iou"] > iou_thresh])
+    df_list = 
+    total_gt = sum([df["num_gt"][0] for df in df_list])
+    df_pos_pred = [df.loc[df["prob"] >= p_thresh] for df in df_list]
+    total_tp = sum([len(df.loc[df["max_iou"] > iou_thresh,
+        "hit_label"].unique()) for df in df_pos_pred])
+    total_fp = sum([len(df) - len(df.loc[df["max_iou"] > iou_thresh])
+        for df in df_pos_pred])
 
-            total_gt += gt_cnt
-            total_tp += tp_cnt
-            total_fp += fp_cnt
-
-    fpr = total_fp / (len(df_list) + EPS)
-    recall = total_tp / (total_gt + EPS)
+    fpr = (total_fp + EPS) / (len(df_list) + EPS)
+    recall = (total_tp + EPS) / (total_gt + EPS)
 
     return fpr, recall
 
 
-def froc(df_list, iou_thresh=0.1):
+def _interpolate_recall_at_fp(fpr_recall, key_fp):
+    fpr_recall_less_fp = fpr_recall.loc[fpr_recall.fpr <= key_fp]
+    fpr_recall_more_fp = fpr_recall.loc[fpr_recall.fpr >= key_fp]
+
+    if len(fpr_recall_less_fp) == 0:
+        return 0
+    
+    if len(fpr_recall_more_fp) == 0:
+        return fpr_recall.recall.max()
+
+    fpr_0 = fpr_recall_less_fp["fpr"].values[-1]
+    fpr_1 = fpr_recall_more_fp["fpr"].values[0]
+    recall_0 = fpr_recall_less_fp["recall"].values[-1]
+    recall_1 = fpr_recall_more_fp["recall"].values[0]
+    recall_at_fp = recall_0 + (recall_1 - recall_0)\
+        * ((key_fp - fpr_0) / (fpr_1 - fpr_0))
+    
+    return recall_at_fp
+
+
+def _get_key_recall(fpr, recall, key_fp):
+    fpr_recall = pd.DataFrame({"fpr": fpr, "recall": recall})
+    key_recall = [_interpolate_recall_at_fp(fpr_recall, fp) for fp in key_fp]
+
+    return key_recall
+
+
+def froc(df_list, iou_thresh=0.2, key_fp=(0.5, 1, 2, 4, 8)):
     """
     Calculate the FROC curve.
 
@@ -172,6 +225,9 @@ def froc(df_list, iou_thresh=0.1):
         List of prediction metrics.
     iou_thresh : float
         The IoU threshold of predictions being considered as "hit".
+    key_fp : tuple of float
+        The key false positive per scan used in evaluating the sensitivity
+        of the model.
 
     Returns
     -------
@@ -179,19 +235,17 @@ def froc(df_list, iou_thresh=0.1):
         List of false positive rate for a range of threshold from 0 to 1.
     recall : float
         List of recall rate for a range of threshold from 0 to 1.
-    aufroc : float
-        Area under FROC curve. Range from 0 to 1.
     """
     fpr_recall = [_froc_single_thresh(df_list, p_thresh, iou_thresh)
         for p_thresh in np.arange(0, 1, 0.01)]
     fpr = [x[0] for x in fpr_recall]
     recall = [x[1] for x in fpr_recall]
-    aufroc = auc(fpr, recall) / max(fpr)
+    key_recall = _get_key_recall(fpr, recall, key_fp)
 
-    return fpr, recall, aufroc
+    return fpr, recall, key_fp, key_recall
 
 
-def plot_froc(fpr, recall, aufroc):
+def plot_froc(fpr, recall):
     """
     Plot the FROC curve.
 
@@ -205,22 +259,27 @@ def plot_froc(fpr, recall, aufroc):
     _, ax = plt.subplots()
     ax.plot(fpr, recall)
     ax.set_title("FROC")
-    ax.legend([f"AUFROC={aufroc:.4f}"])
     plt.show()
 
 
-def evaluate(pred_dir, subset, threshold=0):
+def evaluate(gt_dir, pred_dir, gt_csv_path, pred_csv_path):
     """
-    Evaluate predictions against the ground-truth on a certain subset.
+    Evaluate predictions against the ground-truth.
 
     Parameters
     ----------
+    gt_dir : str
+        The ground-truth nii directory.
     pred_dir : str
-        The directory where all prediction .nii files exist.
-    subset : str, {"train", "val"}
-        Data subset for evaluation.
-    threshold : float
-        The probability threshold of a positive prediction.
+        The prediction nii directory.
+    gt_csv_path : str
+        The ground-truth information csv path. The csv should contain 3
+        columns: pid (patient id), label_index (GT index in the volume), and
+        class (classification prediction).
+    pred_csv_path : str
+        The prediction information csv path. The csv should contain 3 columns:
+        pid (patient id), label_index (prediction index in the volume)
+        probs (prediction confidence), and class (classification prediction).
 
     Returns
     -------
@@ -233,32 +292,44 @@ def evaluate(pred_dir, subset, threshold=0):
     aufroc : float
         Area under FROC curve. Range from 0 to 1.
     """
-    pred_iter = NiiDataset(pred_dir)
-    gt_dir = os.path.join(DATA_DIR, "labels", subset)
     gt_iter = NiiDataset(gt_dir)
+    pred_iter = NiiDataset(pred_dir)
+    gt_info = pd.read_csv(gt_csv_path)
+    pred_info = pd.read_csv(pred_csv_path)
+    pred_info["pid"] = pred_info.pid.map(lambda x: x.strip())
 
     assert len(pred_iter) == len(gt_iter),\
         "Unequal number of predictions and ground-truths."
+    assert [os.path.basename(x) for x in gt_iter.file_list]\
+        == [os.path.basename(x) for x in pred_iter.file_list],\
+        "Unmatched file names in ground-truth and prediction directory."
 
     eval_results = []
     for i in tqdm(range(len(gt_iter))):
-        eval_results.append(evaluate_single_prediction(pred_iter[i],
-            gt_iter[i], threshold))
+        gt_arr, pid = gt_iter[i]
+        cur_gt_info = gt_info.loc[gt_info.pid == pid].reset_index(drop=True)
+        pred_arr, _ = pred_iter[i]
+        cur_pred_info = pred_info.loc[pred_info.pid == pid, :]\
+            .reset_index(drop=True)
+        eval_results.append(evaluate_single_prediction(
+            gt_arr, pred_arr, cur_gt_info, cur_pred_info))
 
-    fpr, recall, aufroc = froc(eval_results)
-    plot_froc(fpr, recall, aufroc)
+    det_results = [x[0] for x in eval_results]
+    clf_results = pd.DataFrame(np.sum([x[1].values for x in eval_results],
+        axis=0), index=clf_conf_mat_rows, columns=clf_conf_mat_cols)
+    fpr, recall, key_fp, key_recall = froc(det_results)
+    plot_froc(fpr, recall)
 
-    return eval_results, fpr, recall, aufroc
+    return fpr, recall, key_fp, key_recall, clf_results
 
 
 if __name__ == "__main__":
-    import argparse
+    gt_dir = "/mnt/sdb/data/rib_frac/ribfrac_challenge/labels/val"
+    pred_dir = "/mnt/sdb/data/rib_frac/labelled_model_predictions/val"
+    gt_csv_path = "/mnt/sdb/data/rib_frac/val_sample_gt_info.csv"
+    pred_csv_path = "/mnt/sdb/data/rib_frac/val_sample_pred_info.csv"
+    fpr, recall, key_fp, key_recall, clf_results = evaluate(gt_dir, pred_dir,
+        gt_csv_path, pred_csv_path)
+    print(key_recall)
+    print(clf_results)
 
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--pred_dir", required=True)
-    parser.add_argument("--subset", required=True)
-    args = parser.parse_args()
-
-    _, _, _, aufroc = evaluate(args.pred_dir, args.subset)
-    print(f"Evaluation on {args.subset}: AUFROC={aufroc:.4f}")
