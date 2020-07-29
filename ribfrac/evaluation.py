@@ -18,32 +18,53 @@ clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental",
 clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"]
 
 
-def _get_clf_result(x):
+def _get_gt_class(x):
+    # if GT classification exists, use that
     if not pd.isna(x["gt_class"]):
         return x["gt_class"]
+    # if no classification exists but the prediction hits, ignore it
     elif x["hit_label"] != 0:
         return "Ignore"
+    # if the prediction doesn't hit anything, it's a false positive
     else:
         return "FP"
 
 
 def _get_clf_confusion_matrix(gt_info, pred_metrics):
+    # set up the confusion matrix
     conf_mat = pd.DataFrame(np.zeros((len(clf_conf_mat_rows),
         len(clf_conf_mat_cols))), index=clf_conf_mat_rows,
         columns=clf_conf_mat_cols)
+    
+    # iterate through all predictions and fill them in the confusion matrix
     for i in range(len(pred_metrics)):
         gt_class = pred_metrics.gt_class[i]
         pred_class = pred_metrics.pred_class[i]
         conf_mat.loc[pred_class, gt_class] += 1
     
+    # iterate through all undetected GTs and fill them in the confusion matrix
     for i in range(len(gt_info)):
         if gt_info.label_index[i] not in pred_metrics.hit_label.tolist():
             conf_mat.loc["FN", gt_info["class"][i]] += 1
-    
+
     return conf_mat
 
 
-def _compile_pred_metrics(iou_matrix, inter_matrix, gt_info, pred_info):
+def _calculate_f1(conf_matrix):
+    conf_matrix_wo_ignore = conf_matrix.values[:, :-1]
+    tp = np.diag(conf_matrix_wo_ignore)
+    fp = [conf_matrix_wo_ignore[i, :].sum() - tp[i]
+        for i in range(conf_matrix_wo_ignore.shape[0])]
+    fn = [conf_matrix_wo_ignore[:, i].sum() - tp[i]
+        for i in range(conf_matrix_wo_ignore.shape[0])]
+    precision = sum(tp) / (sum(tp) + sum(fp))
+    recall = sum(tp) / (sum(tp) + sum(fn))
+    f1_score = (2 * precision * recall) / (precision + recall)
+
+    return f1_score
+
+
+def _compile_pred_metrics(iou_matrix, gt_info, pred_info):
     """
     Compile prediction metrics into a Pandas DataFrame
 
@@ -51,8 +72,6 @@ def _compile_pred_metrics(iou_matrix, inter_matrix, gt_info, pred_info):
     ----------
     iou_matrix : numpy.ndarray
         IoU array with shape of (n_pred, n_gt).
-    inter_matrix : numpy.ndarray
-        Intersection array with shape of (n_pred, n_gt).
     gt_info : pandas.DataFrame
         DataFrame containing GT information.
     pred_info : pandas.DataFrame
@@ -76,21 +95,27 @@ def _compile_pred_metrics(iou_matrix, inter_matrix, gt_info, pred_info):
     pred_metrics["pred_label"] = np.arange(1, iou_matrix.shape[0] + 1)
     pred_metrics["max_iou"] = iou_matrix.max(axis=1)
     pred_metrics["hit_label"] = iou_matrix.argmax(axis=1) + 1
+
     # if max_iou == 0, this prediction doesn't hit any GT
     pred_metrics["hit_label"] = pred_metrics.apply(lambda x: x["hit_label"]
         if x["max_iou"] > 0 else 0, axis=1)
     pred_metrics["prob"] = pred_info.sort_values("label_index")\
         ["probs"].values
+
+    # fill in the classification prediction
     pred_metrics["pred_class"] = pred_info.sort_values("label_index")\
         ["class"].values
+
+    # compare the classification prediction against GT
     pred_metrics = pred_metrics.merge(gt_info[["label_index", "class"]],
         how="left", left_on="hit_label", right_on="label_index")
     pred_metrics.rename({"class": "gt_class"}, axis=1, inplace=True)
     pred_metrics.drop("label_index", axis=1, inplace=True)
-    pred_metrics["gt_class"] = pred_metrics.apply(_get_clf_result, axis=1)
+    pred_metrics["gt_class"] = pred_metrics.apply(_get_gt_class, axis=1)
 
     pred_metrics["num_gt"] = iou_matrix.shape[1]
 
+    # compile the classification confusion matrix
     clf_conf_mat = _get_clf_confusion_matrix(gt_info, pred_metrics)
 
     return pred_metrics, clf_conf_mat
@@ -118,42 +143,57 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
     """
     gt_label = gt_label.astype(np.uint8)
     pred_label = pred_label.astype(np.uint8)
+
+    # GT and prediction must have the same shape
     assert gt_label.shape == pred_label.shape,\
         "The prediction and ground-truth have different shapes. gt:"\
         f" {gt_label.shape} and pred: {pred_label.shape}."
 
+    num_gt = gt_label.max()
+    
+    # if the prediction is empty, return empty pred_metrics
+    # and confusion matrix
+    if pred_label.max() == 0:
+        pred_metrics = pd.DataFrame()
+        return pred_metrics, num_gt,\
+            _get_clf_confusion_matrix(gt_info, pred_metrics)
+
+    # binarize the GT and prediction
     gt_bin = (gt_label > 0).astype(np.uint8)
     pred_bin = (pred_label > 0).astype(np.uint8)
 
-    num_gt = int(gt_label.max())
     num_pred = int(pred_label.max())
     iou_matrix = np.zeros((num_gt, num_pred))
-    inter_matrix = np.zeros_like(iou_matrix)
 
     intersection = np.logical_and(gt_bin, pred_bin)
     union = label(np.logical_or(gt_bin, pred_bin))
+
+    # iterate through all intersection area and evaluate predictions
     for region in regionprops(label(intersection)):
+        # calculate the centroid of intersection
         centroid = tuple([int(round(x)) for x in region.centroid])
+        
+        # get corresponding GT index, pred index and union index
         gt_idx = gt_label[centroid[0], centroid[1], centroid[2]]
         pred_idx = pred_label[centroid[0], centroid[1], centroid[2]]
         union_idx = union[centroid[0], centroid[1], centroid[2]]
+
         if gt_idx == 0 or pred_idx == 0 or union_idx == 0:
             continue
+
         inter_area = region.area
         union_area = (union == union_idx).sum()
         iou = inter_area / (union_area + 1e-8)
         iou_matrix[gt_idx - 1, pred_idx - 1] = iou
-        inter_matrix[gt_idx - 1, pred_idx - 1] = inter_area
 
     iou_matrix = iou_matrix.T
-    inter_matrix = inter_matrix.T
     pred_metrics, clf_conf_mat = _compile_pred_metrics(iou_matrix,
-        inter_matrix, gt_info, pred_info)
+        gt_info, pred_info)
 
-    return pred_metrics, clf_conf_mat
+    return pred_metrics, num_gt, clf_conf_mat
 
 
-def _froc_single_thresh(df_list, p_thresh, iou_thresh):
+def _froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh):
     """
     Calculate the FROC for a single confidence threshold.
 
@@ -161,6 +201,8 @@ def _froc_single_thresh(df_list, p_thresh, iou_thresh):
     ----------
     df_list : list of pandas.DataFrame
         List of Pandas DataFrame of prediction metrics.
+    num_gts : list of int
+        List of number of GT in each volume.
     p_thresh : float
         The probability threshold of positive predictions.
     iou_thresh : float
@@ -175,11 +217,17 @@ def _froc_single_thresh(df_list, p_thresh, iou_thresh):
     """
     EPS = 1e-8
 
-    df_list = 
-    total_gt = sum([df["num_gt"][0] for df in df_list])
-    df_pos_pred = [df.loc[df["prob"] >= p_thresh] for df in df_list]
-    total_tp = sum([len(df.loc[df["max_iou"] > iou_thresh,
-        "hit_label"].unique()) for df in df_pos_pred])
+    total_gt = sum(num_gts)
+
+    # collect all predictions above the probability threshold
+    df_pos_pred = [df.loc[df["prob"] >= p_thresh] for df in df_list
+        if len(df) > 0]
+    
+    # calculate total true positives
+    total_tp = sum([len(df.loc[df["max_iou"] > iou_thresh, "hit_label"]\
+        .unique()) for df in df_pos_pred])
+
+    # calculate total false positives
     total_fp = sum([len(df) - len(df.loc[df["max_iou"] > iou_thresh])
         for df in df_pos_pred])
 
@@ -216,13 +264,15 @@ def _get_key_recall(fpr, recall, key_fp):
     return key_recall
 
 
-def froc(df_list, iou_thresh=0.2, key_fp=(0.5, 1, 2, 4, 8)):
+def froc(df_list, num_gts, iou_thresh=0.2, key_fp=(0.5, 1, 2, 4, 8)):
     """
     Calculate the FROC curve.
 
     Parameters
     df_list : list of pandas.DataFrame
         List of prediction metrics.
+    num_gts : list of int
+        List of number of GT in each volume.
     iou_thresh : float
         The IoU threshold of predictions being considered as "hit".
     key_fp : tuple of float
@@ -232,11 +282,15 @@ def froc(df_list, iou_thresh=0.2, key_fp=(0.5, 1, 2, 4, 8)):
     Returns
     -------
     fpr : list of float
-        List of false positive rate for a range of threshold from 0 to 1.
-    recall : float
-        List of recall rate for a range of threshold from 0 to 1.
+        List of false positive per scan at different probability thresholds.
+    recall : list of float
+        List of recall at different probability thresholds.
+    key_fp : list of float
+        List of key FP. The default values are (0.5, 1, 2, 4, 8).
+    key_recall : list of float
+        List of key recall corresponding to key FPs.
     """
-    fpr_recall = [_froc_single_thresh(df_list, p_thresh, iou_thresh)
+    fpr_recall = [_froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh)
         for p_thresh in np.arange(0, 1, 0.01)]
     fpr = [x[0] for x in fpr_recall]
     recall = [x[1] for x in fpr_recall]
@@ -283,14 +337,16 @@ def evaluate(gt_dir, pred_dir, gt_csv_path, pred_csv_path):
 
     Returns
     -------
-    eval_results : list of pandas.DataFrame
-        Evaluation results for each prediction.
     fpr : list of float
-        List of false positive rate for a range of threshold from 0 to 1.
-    recall : float
-        List of recall rate for a range of threshold from 0 to 1.
-    aufroc : float
-        Area under FROC curve. Range from 0 to 1.
+        List of false positive per scan at different probability thresholds.
+    recall : list of float
+        List of recall at different probability thresholds.
+    key_fp : list of float
+        List of key FP. The default values are (0.5, 1, 2, 4, 8).
+    key_recall : list of float
+        List of key recall corresponding to key FPs.
+    clf_results : pandas.DataFrame
+        Classification confusion matrix.
     """
     gt_iter = NiiDataset(gt_dir)
     pred_iter = NiiDataset(pred_dir)
@@ -313,23 +369,18 @@ def evaluate(gt_dir, pred_dir, gt_csv_path, pred_csv_path):
             .reset_index(drop=True)
         eval_results.append(evaluate_single_prediction(
             gt_arr, pred_arr, cur_gt_info, cur_pred_info))
+        
+        if i == 10:
+            break
 
     det_results = [x[0] for x in eval_results]
-    clf_results = pd.DataFrame(np.sum([x[1].values for x in eval_results],
+    num_gts = [x[1] for x in eval_results]
+    clf_results = pd.DataFrame(np.sum([x[2].values for x in eval_results],
         axis=0), index=clf_conf_mat_rows, columns=clf_conf_mat_cols)
-    fpr, recall, key_fp, key_recall = froc(det_results)
+    fpr, recall, key_fp, key_recall = froc(det_results, num_gts)
     plot_froc(fpr, recall)
 
+    f1 = _calculate_f1(clf_results)
+    print("F1 score: ", f1)
+
     return fpr, recall, key_fp, key_recall, clf_results
-
-
-if __name__ == "__main__":
-    gt_dir = "/mnt/sdb/data/rib_frac/ribfrac_challenge/labels/val"
-    pred_dir = "/mnt/sdb/data/rib_frac/labelled_model_predictions/val"
-    gt_csv_path = "/mnt/sdb/data/rib_frac/val_sample_gt_info.csv"
-    pred_csv_path = "/mnt/sdb/data/rib_frac/val_sample_pred_info.csv"
-    fpr, recall, key_fp, key_recall, clf_results = evaluate(gt_dir, pred_dir,
-        gt_csv_path, pred_csv_path)
-    print(key_recall)
-    print(clf_results)
-
