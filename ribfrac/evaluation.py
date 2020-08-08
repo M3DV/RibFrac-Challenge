@@ -8,7 +8,7 @@ from skimage.measure import label, regionprops
 from sklearn.metrics import auc
 from tqdm import tqdm
 
-from .nii_dataset import NiiDataset
+from nii_dataset import NiiDataset
 
 __all__ = ["froc", "plot_froc", "evaluate"]
 
@@ -16,10 +16,11 @@ __all__ = ["froc", "plot_froc", "evaluate"]
 clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental",
     "FP", "Ignore"]
 clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"]
+DEFAULT_KEY_FP = (0.5, 1, 2, 4, 8)
 
 
 def _get_gt_class(x):
-    # if GT classification exists, use that
+    # if GT classification exists, use it
     if not pd.isna(x["gt_class"]):
         return x["gt_class"]
     # if no classification exists but the prediction hits, ignore it
@@ -31,6 +32,21 @@ def _get_gt_class(x):
 
 
 def _get_clf_confusion_matrix(gt_info, pred_metrics):
+    """
+    Calculate the classification confusion matrix.
+
+    Parameters
+    ----------
+    gt_info : pandas.DataFrame
+        DataFrame containing GT information.
+    pred_metrics : pandas.DataFrame
+        A dataframe of prediction metrics.
+    
+    Returns
+    -------
+    conf_mat : pandas.DataFrame
+        DataFrame of confusion matrix.
+    """
     # set up the confusion matrix
     conf_mat = pd.DataFrame(np.zeros((len(clf_conf_mat_rows),
         len(clf_conf_mat_cols))), index=clf_conf_mat_rows,
@@ -41,7 +57,7 @@ def _get_clf_confusion_matrix(gt_info, pred_metrics):
         gt_class = pred_metrics.gt_class[i]
         pred_class = pred_metrics.pred_class[i]
         conf_mat.loc[pred_class, gt_class] += 1
-    
+
     # iterate through all undetected GTs and fill them in the confusion matrix
     for i in range(len(gt_info)):
         if gt_info.label_index[i] not in pred_metrics.hit_label.tolist():
@@ -51,15 +67,29 @@ def _get_clf_confusion_matrix(gt_info, pred_metrics):
 
 
 def _calculate_f1(conf_matrix):
+    """
+    Calculate classification macro F1 score.
+
+    Parameters
+    ----------
+    conf_matrix : pandas.DataFrame
+        DataFrame of confusion matrix.
+    
+    Returns
+    -------
+    f1_score : float
+        Classification macro F1 score.
+    """ 
     conf_matrix_wo_ignore = conf_matrix.values[:, :-1]
-    tp = np.diag(conf_matrix_wo_ignore)
-    fp = [conf_matrix_wo_ignore[i, :].sum() - tp[i]
-        for i in range(conf_matrix_wo_ignore.shape[0])]
-    fn = [conf_matrix_wo_ignore[:, i].sum() - tp[i]
-        for i in range(conf_matrix_wo_ignore.shape[0])]
-    precision = sum(tp) / (sum(tp) + sum(fp))
-    recall = sum(tp) / (sum(tp) + sum(fn))
-    f1_score = (2 * precision * recall) / (precision + recall)
+    tp = np.diag(conf_matrix_wo_ignore)[:-1]
+    # minus 1 since only four GT classes need to be calculated
+    fp = np.array([conf_matrix_wo_ignore[i, :].sum() - tp[i]
+        for i in range(conf_matrix_wo_ignore.shape[0] - 1)])
+    fn = np.array([conf_matrix_wo_ignore[:, i].sum() - tp[i]
+        for i in range(conf_matrix_wo_ignore.shape[0] - 1)])
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    f1_score = np.mean((2 * precision * recall) / (precision + recall + 1e-8))
 
     return f1_score
 
@@ -210,8 +240,8 @@ def _froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh):
 
     Returns
     -------
-    fpr : float
-        False positive rate for this threshold.
+    fp : float
+        False positives per scan for this threshold.
     recall : float
         Recall rate for this threshold.
     """
@@ -231,40 +261,76 @@ def _froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh):
     total_fp = sum([len(df) - len(df.loc[df["max_iou"] > iou_thresh])
         for df in df_pos_pred])
 
-    fpr = (total_fp + EPS) / (len(df_list) + EPS)
+    fp = (total_fp + EPS) / (len(df_list) + EPS)
     recall = (total_tp + EPS) / (total_gt + EPS)
 
-    return fpr, recall
+    return fp, recall
 
 
-def _interpolate_recall_at_fp(fpr_recall, key_fp):
-    fpr_recall_less_fp = fpr_recall.loc[fpr_recall.fpr <= key_fp]
-    fpr_recall_more_fp = fpr_recall.loc[fpr_recall.fpr >= key_fp]
+def _interpolate_recall_at_fp(fp_recall, key_fp):
+    """
+    Calculate recall at key_fp using interpolation.
 
-    if len(fpr_recall_less_fp) == 0:
+    Parameters
+    ----------
+    fp_recall : pandas.DataFrame
+        DataFrame of FP and recall.
+    key_fp : float
+        Key FP threshold at which the recall will be calculated.
+    
+    Returns
+    -------
+    recall_at_fp : float
+        Recall at key_fp.
+    """
+    # get fp/recall interpolation points
+    fp_recall_less_fp = fp_recall.loc[fp_recall.fp <= key_fp]
+    fp_recall_more_fp = fp_recall.loc[fp_recall.fp >= key_fp]
+
+    # if key_fp < min_fp, recall = 0
+    if len(fp_recall_less_fp) == 0:
         return 0
-    
-    if len(fpr_recall_more_fp) == 0:
-        return fpr_recall.recall.max()
 
-    fpr_0 = fpr_recall_less_fp["fpr"].values[-1]
-    fpr_1 = fpr_recall_more_fp["fpr"].values[0]
-    recall_0 = fpr_recall_less_fp["recall"].values[-1]
-    recall_1 = fpr_recall_more_fp["recall"].values[0]
+    # if key_fp > max_fp, recall = max_recall
+    if len(fp_recall_more_fp) == 0:
+        return fp_recall.recall.max()
+
+    fp_0 = fp_recall_less_fp["fp"].values[-1]
+    fp_1 = fp_recall_more_fp["fp"].values[0]
+    recall_0 = fp_recall_less_fp["recall"].values[-1]
+    recall_1 = fp_recall_more_fp["recall"].values[0]
     recall_at_fp = recall_0 + (recall_1 - recall_0)\
-        * ((key_fp - fpr_0) / (fpr_1 - fpr_0))
-    
+        * ((key_fp - fp_0) / (fp_1 - fp_0))
+
     return recall_at_fp
 
 
-def _get_key_recall(fpr, recall, key_fp):
-    fpr_recall = pd.DataFrame({"fpr": fpr, "recall": recall})
-    key_recall = [_interpolate_recall_at_fp(fpr_recall, fp) for fp in key_fp]
+def _get_key_recall(fp, recall, key_fp_list):
+    """
+    Calculate recall at a series of FP threshold.
+
+    Parameters
+    ----------
+    fp : list of float
+        List of FP at different probability thresholds.
+    recall : list of float
+        List of recall at different probability thresholds.
+    key_fp_list : list of float
+        List of key FP values.
+    
+    Returns
+    -------
+    key_recall : list of float
+        List of key recall at each key FP.
+    """
+    fp_recall = pd.DataFrame({"fp": fp, "recall": recall})
+    key_recall = [_interpolate_recall_at_fp(fp_recall, key_fp)
+        for key_fp in key_fp_list]
 
     return key_recall
 
 
-def froc(df_list, num_gts, iou_thresh=0.2, key_fp=(0.5, 1, 2, 4, 8)):
+def froc(df_list, num_gts, iou_thresh=0.2, key_fp=DEFAULT_KEY_FP):
     """
     Calculate the FROC curve.
 
@@ -281,42 +347,44 @@ def froc(df_list, num_gts, iou_thresh=0.2, key_fp=(0.5, 1, 2, 4, 8)):
 
     Returns
     -------
-    fpr : list of float
-        List of false positive per scan at different probability thresholds.
+    fp : list of float
+        List of false positives per scan at different probability thresholds.
     recall : list of float
         List of recall at different probability thresholds.
-    key_fp : list of float
-        List of key FP. The default values are (0.5, 1, 2, 4, 8).
     key_recall : list of float
         List of key recall corresponding to key FPs.
+    avg_recall : float
+        Average recall at key FPs. This is the evaluation metric we use
+        in the detection track.
     """
-    fpr_recall = [_froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh)
+    fp_recall = [_froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh)
         for p_thresh in np.arange(0, 1, 0.01)]
-    fpr = [x[0] for x in fpr_recall]
-    recall = [x[1] for x in fpr_recall]
-    key_recall = _get_key_recall(fpr, recall, key_fp)
+    fp = [x[0] for x in fp_recall]
+    recall = [x[1] for x in fp_recall]
+    key_recall = _get_key_recall(fp, recall, key_fp)
+    avg_recall = np.mean(key_recall)
 
-    return fpr, recall, key_fp, key_recall
+    return fp, recall, key_recall, avg_recall
 
 
-def plot_froc(fpr, recall):
+def plot_froc(fp, recall):
     """
     Plot the FROC curve.
 
     Parameters
     ----------
-    fpr : list of float
-        List of false positive rates at different confidence thresholds.
+    fp : list of float
+        List of false positive per scans at different confidence thresholds.
     recall : list of float
         List of recall at different confidence thresholds.
     """
     _, ax = plt.subplots()
-    ax.plot(fpr, recall)
+    ax.plot(fp, recall)
     ax.set_title("FROC")
     plt.show()
 
 
-def evaluate(gt_dir, pred_dir, gt_csv_path, pred_csv_path):
+def evaluate(gt_dir, pred_dir):
     """
     Evaluate predictions against the ground-truth.
 
@@ -326,34 +394,25 @@ def evaluate(gt_dir, pred_dir, gt_csv_path, pred_csv_path):
         The ground-truth nii directory.
     pred_dir : str
         The prediction nii directory.
-    gt_csv_path : str
-        The ground-truth information csv path. The csv should contain 3
-        columns: pid (patient id), label_index (GT index in the volume), and
-        class (classification prediction).
-    pred_csv_path : str
-        The prediction information csv path. The csv should contain 3 columns:
-        pid (patient id), label_index (prediction index in the volume)
-        probs (prediction confidence), and class (classification prediction).
 
     Returns
     -------
-    fpr : list of float
-        List of false positive per scan at different probability thresholds.
-    recall : list of float
-        List of recall at different probability thresholds.
-    key_fp : list of float
-        List of key FP. The default values are (0.5, 1, 2, 4, 8).
-    key_recall : list of float
-        List of key recall corresponding to key FPs.
-    clf_results : pandas.DataFrame
-        Classification confusion matrix.
+    eval_results : dict
+        Dictionary containing detection and classification results.
     """
+    # GT and prediction iterator
     gt_iter = NiiDataset(gt_dir)
     pred_iter = NiiDataset(pred_dir)
+
+    gt_csv_path = [os.path.join(gt_dir, x) for x in os.listdir(gt_dir)
+        if x.endswith(".csv")][0]
+    pred_csv_path = [os.path.join(pred_dir, x) for x in os.listdir(pred_dir)
+        if x.endswith(".csv")][0]
     gt_info = pd.read_csv(gt_csv_path)
     pred_info = pd.read_csv(pred_csv_path)
     pred_info["pid"] = pred_info.pid.map(lambda x: x.strip())
 
+    # GT and prediction directory sanity check
     assert len(pred_iter) == len(gt_iter),\
         "Unequal number of predictions and ground-truths."
     assert [os.path.basename(x) for x in gt_iter.file_list]\
@@ -361,26 +420,90 @@ def evaluate(gt_dir, pred_dir, gt_csv_path, pred_csv_path):
         "Unmatched file names in ground-truth and prediction directory."
 
     eval_results = []
-    for i in tqdm(range(len(gt_iter))):
+    progress = tqdm(total=len(gt_iter))
+    for i in range(len(gt_iter)):
+        # get GT array and information
         gt_arr, pid = gt_iter[i]
         cur_gt_info = gt_info.loc[gt_info.pid == pid].reset_index(drop=True)
+
+        # get prediction array and information
         pred_arr, _ = pred_iter[i]
         cur_pred_info = pred_info.loc[pred_info.pid == pid, :]\
             .reset_index(drop=True)
+
+        # perform evaluation
         eval_results.append(evaluate_single_prediction(
             gt_arr, pred_arr, cur_gt_info, cur_pred_info))
-        
+
+        progress.update(1)
+
         if i == 10:
             break
 
+    progress.close()
+
+    # detection results
     det_results = [x[0] for x in eval_results]
     num_gts = [x[1] for x in eval_results]
-    clf_results = pd.DataFrame(np.sum([x[2].values for x in eval_results],
+
+    # classification results
+    clf_conf_mat = pd.DataFrame(np.sum([x[2].values for x in eval_results],
         axis=0), index=clf_conf_mat_rows, columns=clf_conf_mat_cols)
-    fpr, recall, key_fp, key_recall = froc(det_results, num_gts)
-    plot_froc(fpr, recall)
 
-    f1 = _calculate_f1(clf_results)
-    print("F1 score: ", f1)
+    # calculate the detection FROC
+    fp, recall, key_recall, avg_recall = froc(det_results, num_gts)
 
-    return fpr, recall, key_fp, key_recall, clf_results
+    # calculate the classification macro F1
+    clf_f1 = _calculate_f1(clf_conf_mat)
+
+    eval_results = {
+        "detection": {
+            "fp": fp,
+            "recall": recall,
+            "key_recall": key_recall,
+            "average_recall": avg_recall
+        },
+        "classification": {
+            "confusion_matrix": clf_conf_mat,
+            "macro_average_F1": clf_f1
+        }
+    }
+
+    return eval_results
+
+if __name__ == "__main__":
+    import argparse
+
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gt_dir", required=True)
+    parser.add_argument("--pred_dir", required=True)
+    parser.add_argument("--offline", default="True")
+    args = parser.parse_args()
+    eval_results = evaluate(args.gt_dir, args.pred_dir)
+
+    if eval(args.offline):
+        print("\nDetection metrics")
+        print("=" * 64)
+        print("Recall at key FP")
+        print(pd.DataFrame(np.array(eval_results["detection"]["key_recall"])\
+            .reshape(1, -1), index=["Recall"],
+            columns=[f"FP={str(x)}" for x in DEFAULT_KEY_FP]))
+        print("Average recall: {:.4f}".format(
+            eval_results["detection"]["average_recall"]))
+
+        print("\nClassification metrics")
+        print("=" * 64)
+        print("Confusion matrix")
+        print(eval_results["classification"]["confusion_matrix"])
+        print("Macro-average F1: {:.4f}".format(
+            eval_results["classification"]["macro_average_F1"]))
+    else:
+        print("Detection metrics")
+        print("=" * 64)
+        print("Average recall: {:.4f}".format(
+            eval_results["detection"]["average_recall"]))
+        print("\nClassification metrics")
+        print("=" * 64)
+        print("Macro-average F1: {:.4f}".format(
+            eval_results["classification"]["macro_average_F1"]))
