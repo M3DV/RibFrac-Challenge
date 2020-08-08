@@ -437,9 +437,6 @@ def evaluate(gt_dir, pred_dir):
 
         progress.update(1)
 
-        if i == 10:
-            break
-
     progress.close()
 
     # detection results
