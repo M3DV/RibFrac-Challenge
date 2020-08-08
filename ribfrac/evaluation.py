@@ -495,6 +495,10 @@ if __name__ == "__main__":
         print(eval_results["classification"]["confusion_matrix"])
         print("Macro-average F1: {:.4f}".format(
             eval_results["classification"]["macro_average_F1"]))
+
+        # plot FROC curve
+        plot_froc(eval_results["detection"]["fp"],
+            eval_results["detection"]["recall"])
     else:
         print("Detection metrics")
         print("=" * 64)
