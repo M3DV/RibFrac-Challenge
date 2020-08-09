@@ -52,6 +52,7 @@ The classification prediction .csv should have four columns: pid (patient ID), l
 |RibFrac501|2|0.5|Displaced|
 |...||||
 |RibFrac660|2|0.5|Buckle|
+
 Each row in the classification prediction csv represents one predicted fracture area. The pid should be in the same format as in .nii files. Please follow the exact directory and naming settings, or your submission won't be graded.
 
 You can evaluate your model locally through the following command line:
