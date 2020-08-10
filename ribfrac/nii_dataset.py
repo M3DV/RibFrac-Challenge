@@ -17,6 +17,8 @@ class NiiDataset:
         self.root_dir = root_dir
         self.file_list = sorted([os.path.join(root_dir, x)
             for x in os.listdir(root_dir) if x.endswith(".nii")])
+        self.pid_list = [os.path.splitext(os.path.basename(x))[0]\
+            .replace("-label", "") for x in self.file_list]
 
     def __len__(self):
         return len(self.file_list)
@@ -24,5 +26,4 @@ class NiiDataset:
     def __getitem__(self, idx):
         array = nib.load(self.file_list[idx]).get_fdata()
 
-        return array, os.path.splitext(os.path.basename(
-            self.file_list[idx]))[0]
+        return array, self.pid_list[idx]

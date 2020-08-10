@@ -13,19 +13,29 @@ from nii_dataset import NiiDataset
 __all__ = ["froc", "plot_froc", "evaluate"]
 
 
+# detection key FP values
+DEFAULT_KEY_FP = (0.5, 1, 2, 4, 8)
+
+# classification confusion matrix settings
+label_code_dict = {
+    0: "Background",
+    1: "Displaced",
+    2: "Nondisplaced",
+    3: "Buckle",
+    4: "Segmental",
+    -1: "Ignore"
+}
 clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental",
     "FP", "Ignore"]
 clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"]
-DEFAULT_KEY_FP = (0.5, 1, 2, 4, 8)
+
+pd.set_option("display.precision", 6)
 
 
 def _get_gt_class(x):
     # if GT classification exists, use it
     if not pd.isna(x["gt_class"]):
         return x["gt_class"]
-    # if no classification exists but the prediction hits, ignore it
-    elif x["hit_label"] != 0:
-        return "Ignore"
     # if the prediction doesn't hit anything, it's a false positive
     else:
         return "FP"
@@ -41,7 +51,7 @@ def _get_clf_confusion_matrix(gt_info, pred_metrics):
         DataFrame containing GT information.
     pred_metrics : pandas.DataFrame
         A dataframe of prediction metrics.
-    
+
     Returns
     -------
     conf_mat : pandas.DataFrame
@@ -51,17 +61,22 @@ def _get_clf_confusion_matrix(gt_info, pred_metrics):
     conf_mat = pd.DataFrame(np.zeros((len(clf_conf_mat_rows),
         len(clf_conf_mat_cols))), index=clf_conf_mat_rows,
         columns=clf_conf_mat_cols)
-    
+
     # iterate through all predictions and fill them in the confusion matrix
     for i in range(len(pred_metrics)):
         gt_class = pred_metrics.gt_class[i]
         pred_class = pred_metrics.pred_class[i]
-        conf_mat.loc[pred_class, gt_class] += 1
+        if pred_class not in ("Background", "Ignore"):
+            if gt_class == "Background":
+                gt_class = "FP"
+            conf_mat.loc[pred_class, gt_class] += 1
 
     # iterate through all undetected GTs and fill them in the confusion matrix
     for i in range(len(gt_info)):
-        if gt_info.label_index[i] not in pred_metrics.hit_label.tolist():
-            conf_mat.loc["FN", gt_info["class"][i]] += 1
+        if len(pred_metrics) == 0\
+                or (gt_info.label_code[i] != "Background"\
+                and gt_info.label_id[i] not in list(pred_metrics.hit_label)):
+            conf_mat.loc["FN", gt_info["label_code"][i]] += 1
 
     return conf_mat
 
@@ -87,8 +102,8 @@ def _calculate_f1(conf_matrix):
         for i in range(conf_matrix_wo_ignore.shape[0] - 1)])
     fn = np.array([conf_matrix_wo_ignore[:, i].sum() - tp[i]
         for i in range(conf_matrix_wo_ignore.shape[0] - 1)])
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+    precision = tp / (tp + fp + 1e-8)
+    recall = tp / (tp + fn + 1e-8)
     f1_score = np.mean((2 * precision * recall) / (precision + recall + 1e-8))
 
     return f1_score
@@ -120,8 +135,8 @@ def _compile_pred_metrics(iou_matrix, gt_info, pred_info):
     # pred_class -- The classification prediction
     # gt_class -- The ground-truth prediction
     # num_gt -- Total number of GT in this volume
-    pred_metrics = pd.DataFrame(np.zeros((iou_matrix.shape[0], 4)),
-        columns=["pred_label", "max_iou", "hit_label", "prob"])
+    pred_metrics = pd.DataFrame(np.zeros((iou_matrix.shape[0], 3)),
+        columns=["pred_label", "max_iou", "hit_label"])
     pred_metrics["pred_label"] = np.arange(1, iou_matrix.shape[0] + 1)
     pred_metrics["max_iou"] = iou_matrix.max(axis=1)
     pred_metrics["hit_label"] = iou_matrix.argmax(axis=1) + 1
@@ -129,18 +144,20 @@ def _compile_pred_metrics(iou_matrix, gt_info, pred_info):
     # if max_iou == 0, this prediction doesn't hit any GT
     pred_metrics["hit_label"] = pred_metrics.apply(lambda x: x["hit_label"]
         if x["max_iou"] > 0 else 0, axis=1)
-    pred_metrics["prob"] = pred_info.sort_values("label_index")\
-        ["probs"].values
 
-    # fill in the classification prediction
-    pred_metrics["pred_class"] = pred_info.sort_values("label_index")\
-        ["class"].values
+    # fill in the classification prediction and detection confidence
+    pred_metrics = pred_metrics.merge(
+        pred_info[["label_id", "label_code", "confidence"]],
+        how="left", left_on="pred_label", right_on="label_id")
+    pred_metrics.rename({"confidence": "prob", "label_code": "pred_class"},
+        axis=1, inplace=True)
+    pred_metrics.drop("label_id", axis=1, inplace=True)
 
     # compare the classification prediction against GT
-    pred_metrics = pred_metrics.merge(gt_info[["label_index", "class"]],
-        how="left", left_on="hit_label", right_on="label_index")
-    pred_metrics.rename({"class": "gt_class"}, axis=1, inplace=True)
-    pred_metrics.drop("label_index", axis=1, inplace=True)
+    pred_metrics = pred_metrics.merge(gt_info[["label_id", "label_code"]],
+        how="left", left_on="hit_label", right_on="label_id")
+    pred_metrics.rename({"label_code": "gt_class"}, axis=1, inplace=True)
+    pred_metrics.drop("label_id", axis=1, inplace=True)
     pred_metrics["gt_class"] = pred_metrics.apply(_get_gt_class, axis=1)
 
     pred_metrics["num_gt"] = iou_matrix.shape[1]
@@ -180,13 +197,35 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
         f" {gt_label.shape} and pred: {pred_label.shape}."
 
     num_gt = gt_label.max()
-    
+    num_pred = pred_label.max()
+
     # if the prediction is empty, return empty pred_metrics
     # and confusion matrix
-    if pred_label.max() == 0:
+    if num_pred == 0:
         pred_metrics = pd.DataFrame()
         return pred_metrics, num_gt,\
             _get_clf_confusion_matrix(gt_info, pred_metrics)
+    
+    # if GT is empty
+    if num_gt == 0:
+        pred_metrics = pd.DataFrame([
+            {
+                "pred_label": i,
+                "max_iou": 0,
+                "hit_label": 0,
+                "gt_class": "FP",
+                "num_gt": 0
+            }
+        for i in range(1, num_pred + 1)])
+        pred_metrics = pred_metrics.merge(
+            pred_info[["label_id", "label_code", "confidence"]],
+            how="left", left_on="pred_label", right_on="label_id")
+        pred_metrics.rename(
+            {"label_code": "pred_class", "confidence": "prob"}, axis=1,
+            inplace=True)
+        pred_metrics.drop(["label_id"], axis=1, inplace=True)
+        return pred_metrics, num_gt, _get_clf_confusion_matrix(gt_info,
+            pred_metrics)
 
     # binarize the GT and prediction
     gt_bin = (gt_label > 0).astype(np.uint8)
@@ -248,11 +287,10 @@ def _froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh):
     EPS = 1e-8
 
     total_gt = sum(num_gts)
-
     # collect all predictions above the probability threshold
     df_pos_pred = [df.loc[df["prob"] >= p_thresh] for df in df_list
         if len(df) > 0]
-    
+
     # calculate total true positives
     total_tp = sum([len(df.loc[df["max_iou"] > iou_thresh, "hit_label"]\
         .unique()) for df in df_pos_pred])
@@ -277,7 +315,7 @@ def _interpolate_recall_at_fp(fp_recall, key_fp):
         DataFrame of FP and recall.
     key_fp : float
         Key FP threshold at which the recall will be calculated.
-    
+
     Returns
     -------
     recall_at_fp : float
@@ -410,13 +448,13 @@ def evaluate(gt_dir, pred_dir):
         if x.endswith(".csv")][0]
     gt_info = pd.read_csv(gt_csv_path)
     pred_info = pd.read_csv(pred_csv_path)
-    pred_info["pid"] = pred_info.pid.map(lambda x: x.strip())
+    gt_info["label_code"] = gt_info["label_code"].map(label_code_dict)
+    pred_info["label_code"] = pred_info["label_code"].map(label_code_dict)
 
     # GT and prediction directory sanity check
     assert len(pred_iter) == len(gt_iter),\
         "Unequal number of predictions and ground-truths."
-    assert [os.path.basename(x) for x in gt_iter.file_list]\
-        == [os.path.basename(x) for x in pred_iter.file_list],\
+    assert gt_iter.pid_list == pred_iter.pid_list,\
         "Unmatched file names in ground-truth and prediction directory."
 
     eval_results = []
@@ -424,11 +462,12 @@ def evaluate(gt_dir, pred_dir):
     for i in range(len(gt_iter)):
         # get GT array and information
         gt_arr, pid = gt_iter[i]
-        cur_gt_info = gt_info.loc[gt_info.pid == pid].reset_index(drop=True)
+        cur_gt_info = gt_info.loc[gt_info.public_id == pid]\
+            .reset_index(drop=True)
 
         # get prediction array and information
         pred_arr, _ = pred_iter[i]
-        cur_pred_info = pred_info.loc[pred_info.pid == pid, :]\
+        cur_pred_info = pred_info.loc[pred_info.public_id == pid]\
             .reset_index(drop=True)
 
         # perform evaluation
