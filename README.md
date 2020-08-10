@@ -42,9 +42,9 @@ ground_truth_directory/
     RibFrac_test_classification.csv
 ```
 
-Each .nii file should contain a 3D volume with ```n``` fracture regions labelled in integer from ```1``` to ```n```. The order of axes should be ```(z, y, x)```.
+Each .nii file should contain a 3D volume with ```n``` fracture regions labelled in integer from ```1``` to ```n```. The order of axes should be ```(x, y, z)```.
 
-The classification prediction .csv should have four columns: pid (patient ID), label_index (prediction index in .nii volume), probs (detection probability) and class (fracture class), e.g.:
+The classification prediction .csv should have four columns: ```pid``` (patient ID), ```label_index``` (prediction index in .nii volume), ```probs``` (detection probability) and ```class``` (fracture class), e.g.:
 
 |pid|label_index|probs|class|
 |-|-|-|-|
