@@ -1,6 +1,6 @@
 # RibFrac-Challenge
 
-Evaluation scripts for Rib Fracture Detection and Classification Challenge (RibFrac).
+Evaluation scripts for MICCAI 2020 RibFrac Challenge: Rib Fracture Detection and Classification.
 
 
 
