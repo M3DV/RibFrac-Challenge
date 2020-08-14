@@ -209,14 +209,14 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
     # if GT is empty
     if num_gt == 0:
         pred_metrics = pd.DataFrame([
-            {
-                "pred_label": i,
-                "max_iou": 0,
-                "hit_label": 0,
-                "gt_class": "FP",
-                "num_gt": 0
-            }
-        for i in range(1, num_pred + 1)])
+                {
+                    "pred_label": i,
+                    "max_iou": 0,
+                    "hit_label": 0,
+                    "gt_class": "FP",
+                    "num_gt": 0
+                }
+            for i in range(1, num_pred + 1)])
         pred_metrics = pred_metrics.merge(
             pred_info[["label_id", "label_code", "confidence"]],
             how="left", left_on="pred_label", right_on="label_id")
@@ -419,7 +419,7 @@ def plot_froc(fp, recall):
     _, ax = plt.subplots()
     ax.plot(fp, recall)
     ax.set_title("FROC")
-    plt.show()
+    plt.savefig("froc.jpg")
 
 
 def evaluate(gt_dir, pred_dir):

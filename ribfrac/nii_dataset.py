@@ -16,8 +16,9 @@ class NiiDataset:
     def __init__(self, root_dir):
         self.root_dir = root_dir
         self.file_list = sorted([os.path.join(root_dir, x)
-            for x in os.listdir(root_dir) if x.endswith(".nii")])
-        self.pid_list = [os.path.splitext(os.path.basename(x))[0]\
+            for x in os.listdir(root_dir)
+            if x.endswith(".nii") or x.endswith(".nii.gz")])
+        self.pid_list = [os.path.basename(x).replace(".nii.gz", "")\
             .replace("-label", "") for x in self.file_list]
 
     def __len__(self):

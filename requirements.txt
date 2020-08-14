@@ -4,3 +4,4 @@ numpy>=1.18
 pandas>=0.25
 scikit-image>=0.15
 scikit-learn>=0.22
+tqdm>=4.38
