@@ -1,4 +1,5 @@
 import os
+import re
 
 import nibabel as nib
 import numpy as np
@@ -18,8 +19,9 @@ class NiiDataset:
         self.file_list = sorted([os.path.join(root_dir, x)
             for x in os.listdir(root_dir)
             if x.endswith(".nii") or x.endswith(".nii.gz")])
-        self.pid_list = [os.path.basename(x).replace(".nii.gz", "")\
-            .replace("-label", "") for x in self.file_list]
+        # use regular expression to accomodate both .nii and .nii.gz
+        self.pid_list = [re.sub("(\.nii)|(\.gz)|(-label)", "",
+            os.path.basename(x)) for x in self.file_list]
 
     def __len__(self):
         return len(self.file_list)
