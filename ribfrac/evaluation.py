@@ -361,7 +361,7 @@ def _get_key_recall(fp, recall, key_fp_list):
     key_recall : list of float
         List of key recall at each key FP.
     """
-    fp_recall = pd.DataFrame({"fp": fp, "recall": recall})
+    fp_recall = pd.DataFrame({"fp": fp, "recall": recall}).sort_values("fp")
     key_recall = [_interpolate_recall_at_fp(fp_recall, key_fp)
         for key_fp in key_fp_list]
 
