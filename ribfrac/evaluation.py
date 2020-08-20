@@ -74,9 +74,9 @@ def _get_clf_confusion_matrix(gt_info, pred_metrics):
     # iterate through all undetected GTs and fill them in the confusion matrix
     for i in range(len(gt_info)):
         if len(pred_metrics) == 0\
-                or (gt_info.label_code[i] != "Background"\
-                and gt_info.label_id[i] not in list(pred_metrics.hit_label)):
-            conf_mat.loc["FN", gt_info["label_code"][i]] += 1
+                or gt_info.label_id[i] not in list(pred_metrics.hit_label):
+            if gt_info.label_code[i] != "Background":
+                conf_mat.loc["FN", gt_info["label_code"][i]] += 1
 
     return conf_mat
 
