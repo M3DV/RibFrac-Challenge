@@ -1,6 +1,6 @@
 # RibFrac-Challenge
 
-Evaluation scripts for MICCAI 2020 RibFrac Challenge: Rib Fracture Detection and Classification.
+Evaluation scripts for [MICCAI 2020 RibFrac Challenge: Rib Fracture Detection and Classification](https://ribfrac.grand-challenge.org/).
 
 # Content
 
@@ -28,11 +28,7 @@ pip install -r requirements.txt
 
 ## Download the competition data
 
-You can download the competition data via following links:
-- [Training Set Part I](https://zenodo.org/record/3893508#.XzX_oFkzaHs)
-- [Training Set Part II](https://zenodo.org/record/3893498#.XzYg1lkzaHs)
-- [Validation Set](https://zenodo.org/record/3893496#.XzYeTlkzaHs)
-- Testing Set (not yet released)
+You can download the competition data by first [Join](https://ribfrac.grand-challenge.org/participants/registration/create/) the challenge then visit the [Dataset](https://ribfrac.grand-challenge.org/dataset/) page.
 
 ## Evaluation
 
