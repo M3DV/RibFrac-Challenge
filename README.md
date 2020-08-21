@@ -48,7 +48,7 @@ ground_truth_directory/
     ribfrac-val-info.csv
 ```
 
-Your prediction should be organized similar to the ground-truth directory. .nii.gz and .csv should be placed under the same directory as follows:
+Your prediction should be organized similarly to the ground-truth directory. .nii.gz and .csv should be placed under the same directory as follows:
 ```
 prediction_directory/
     RibFrac421.nii.gz
