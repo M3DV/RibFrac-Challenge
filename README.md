@@ -61,8 +61,8 @@ The prediction info .csv should have four columns: ```public_id``` (patient ID),
 |public_id|label_id|confidence|label_code|
 |-|-|-|-|
 |RibFrac421|0|0.5|0|
-|RibFrac422|1|0.5|1|
-|RibFrac423|2|0.5|2|
+|RibFrac422|1|0.5|3|
+|RibFrac423|2|0.5|1|
 |...||||
 |RibFrac499|0|0.5|0|
 |RibFrac500|1|0.5|3|
