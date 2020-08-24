@@ -338,7 +338,7 @@ def _interpolate_recall_at_fp(fp_recall, key_fp):
     recall_0 = fp_recall_less_fp["recall"].values[-1]
     recall_1 = fp_recall_more_fp["recall"].values[0]
     recall_at_fp = recall_0 + (recall_1 - recall_0)\
-        * ((key_fp - fp_0) / (fp_1 - fp_0))
+        * ((key_fp - fp_0) / (fp_1 - fp_0 + 1e-8))
 
     return recall_at_fp
 
