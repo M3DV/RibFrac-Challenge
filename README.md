@@ -5,7 +5,7 @@ Evaluation scripts for [MICCAI 2020 RibFrac Challenge: Rib Fracture Detection an
 # Content
 
 ```
-RibFract-Challenge/
+RibFrac-Challenge/
     requirements.txt                Required packages for evaluation
     ribfrac/
         evaluation.py               Functions for model evaluation
