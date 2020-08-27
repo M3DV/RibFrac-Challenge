@@ -25,8 +25,8 @@ label_code_dict = {
     4: "Segmental",
     -1: "Ignore"
 }
-clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FP", "Ignore"] # for ground truth
-clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"] # for prediction
+clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FP", "Ignore"] # for ground truth; FP: false positive detection; Ignore: undefined labels in annotations
+clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"] # for prediction; FN: false negative, the missing hit
 
 pd.set_option("display.precision", 6)
 
