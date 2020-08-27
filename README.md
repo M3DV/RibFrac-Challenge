@@ -54,7 +54,7 @@ prediction_directory/
     ribfrac-val-pred.csv
 ```
 
-Each .nii.gz file should contain a 3D volume with ```n``` fracture regions labelled in integer from ```1``` to ```n```. The order of axes should be ```(x, y, z)```.
+Each .nii.gz file should contain a 3D volume with ```n``` fracture regions labelled in integer from ```1``` to ```n```. The order of axes should be ```(x, y, z)``` (something like 512 x 512 x 381).
 
 The prediction info .csv should have four columns: ```public_id``` (patient ID), ```label_id``` (prediction ID marking the specific connected-region in the .nii volume), ```confidence``` (detection confidence) and ```label_code``` (fracture class), e.g.:
 
@@ -68,6 +68,8 @@ The prediction info .csv should have four columns: ```public_id``` (patient ID),
 |RibFrac500|1|0.5|3|
 
 For each public_id, there should be at least one row representing the background class. Similar to in the ground-truth info .csv, the background record should have ```label_id=0``` and ```label_code=0```. Other than that, each row in the classification prediction .csv represents one predicted fracture area. The public_id should be in the same format as in .nii file names.
+
+You can jsut get sample [submission files](https://drive.google.com/file/d/1ehEo69m7hsKG8G_Q5TSLfl8x5y-OepeB/view?usp=sharing, https://drive.google.com/file/d/1o87IKN2MN6ty__V0tc079BvTAPb_uT-K/view?usp=sharing) for the validation and test set. Please note the submission files are just randomly systhesized to pass the evaluation sanity check. 
 
 After setting all of the above, you can evaluate your prediction through the following command line:
 ```bash
