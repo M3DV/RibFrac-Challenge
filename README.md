@@ -37,21 +37,22 @@ We use this script to evaluate your test set submission online. You can evaluate
 To evaluate your prediction locally, you need to prepare the ground-truth and prediction directory. Take validation dataset as an example. After the train/validation data is downloaded, you should unzip it and place all ground-truth label .nii.gz files along with the info .csv file under the same directory as follows:
 ```
 ground_truth_directory/
+    ribfrac-val-info.csv
     RibFrac421-label.nii.gz
     RibFrac422-label.nii.gz
     ...
     RibFrac500-label.nii.gz
-    ribfrac-val-info.csv
+
 ```
 
 Your prediction should be organized similarly to the ground-truth directory. .nii.gz and .csv should be placed under the same directory as follows:
 ```
 prediction_directory/
+    ribfrac-val-pred.csv
     RibFrac421.nii.gz
     RibFrac422.nii.gz
     ...
     RibFrac500.nii.gz
-    ribfrac-val-pred.csv
 ```
 
 Each .nii.gz file should contain a 3D volume with ```n``` fracture regions labelled in integer from ```1``` to ```n```. The order of axes should be ```(x, y, z)``` (something like 512 x 512 x 381).
