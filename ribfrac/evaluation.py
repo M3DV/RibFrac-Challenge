@@ -25,9 +25,8 @@ label_code_dict = {
     4: "Segmental",
     -1: "Ignore"
 }
-clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental",
-    "FP", "Ignore"]
-clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"]
+clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FP", "Ignore"] # for ground truth
+clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"] # for prediction
 
 pd.set_option("display.precision", 6)
 
