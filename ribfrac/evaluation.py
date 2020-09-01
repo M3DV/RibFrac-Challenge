@@ -25,8 +25,9 @@ label_code_dict = {
     4: "Segmental",
     -1: "Ignore"
 }
-clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FP", "Ignore"] # for ground truth; FP: false positive detection; Ignore: undefined labels in annotations
-clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"] # for prediction; FN: false negative, the missing hit
+clf_conf_mat_cols = ["Buckle", "Displaced", "Nondisplaced", "Segmental",
+    "FP", "Ignore"]
+clf_conf_mat_rows = ["Buckle", "Displaced", "Nondisplaced", "Segmental", "FN"]
 
 pd.set_option("display.precision", 6)
 
@@ -238,13 +239,13 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
 
     # iterate through all intersection area and evaluate predictions
     for region in regionprops(label(intersection)):
-        # calculate the centroid of intersection
-        centroid = tuple([int(round(x)) for x in region.centroid])
-        
+        # get an anchor point within the intersection to locate gt & pred
+        anchor = tuple(region.coords[0].tolist())
+
         # get corresponding GT index, pred index and union index
-        gt_idx = gt_label[centroid[0], centroid[1], centroid[2]]
-        pred_idx = pred_label[centroid[0], centroid[1], centroid[2]]
-        union_idx = union[centroid[0], centroid[1], centroid[2]]
+        gt_idx = gt_label[anchor[0], anchor[1], anchor[2]]
+        pred_idx = pred_label[anchor[0], anchor[1], anchor[2]]
+        union_idx = union[anchor[0], anchor[1], anchor[2]]
 
         if gt_idx == 0 or pred_idx == 0 or union_idx == 0:
             continue
