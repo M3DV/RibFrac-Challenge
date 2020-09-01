@@ -68,9 +68,9 @@ The prediction info .csv should have four columns: ```public_id``` (patient ID),
 |RibFrac499|0|0.5|0|
 |RibFrac500|1|0.5|3|
 
-For each public_id, there should be at least one row representing the background class. Similar to in the ground-truth info .csv, the background record should have ```label_id=0``` and ```label_code=0```. Other than that, each row in the classification prediction .csv represents one predicted fracture area. The public_id should be in the same format as in .nii file names.
+For each public_id, there should be at least one row representing the background class. Similar to the ground-truth info .csv, the background record should have ```label_id=0``` and ```label_code=0```. Other than that, each row in the classification prediction .csv represents one predicted fracture area. The public_id should be in the same format as in .nii file names.
 
-You could refer to submission samples for the [validation set](https://drive.google.com/file/d/1o87IKN2MN6ty__V0tc079BvTAPb_uT-K/view) and [test set](https://drive.google.com/file/d/1ehEo69m7hsKG8G_Q5TSLfl8x5y-OepeB/view). Please note submission samples are just randomly generated to pass the evaluation sanity check. 
+You could refer to submission samples for the [validation set](https://drive.google.com/file/d/1o87IKN2MN6ty__V0tc079BvTAPb_uT-K/view) and [test set](https://drive.google.com/file/d/1ehEo69m7hsKG8G_Q5TSLfl8x5y-OepeB/view). Please note that submission samples are randomly generated to pass the evaluation sanity check. 
 
 After setting all of the above, you can evaluate your prediction through the following command line:
 ```bash
