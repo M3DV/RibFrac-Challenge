@@ -92,12 +92,12 @@ def _calculate_f1(conf_matrix):
     ----------
     conf_matrix : pandas.DataFrame
         DataFrame of confusion matrix.
-    
+
     Returns
     -------
     f1_score : float
         Classification macro F1 score.
-    """ 
+    """
     conf_matrix_wo_ignore = conf_matrix.values[:, :-1]
     tp = np.diag(conf_matrix_wo_ignore)[:-1]
     # minus 1 since only four GT classes need to be calculated
@@ -208,7 +208,7 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
         pred_metrics = pd.DataFrame()
         return pred_metrics, num_gt,\
             _get_clf_confusion_matrix(gt_info, pred_metrics)
-    
+
     # if GT is empty
     if num_gt == 0:
         pred_metrics = pd.DataFrame([
@@ -358,7 +358,7 @@ def _get_key_recall(fp, recall, key_fp_list):
         List of recall at different probability thresholds.
     key_fp_list : list of float
         List of key FP values.
-    
+
     Returns
     -------
     key_recall : list of float

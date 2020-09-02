@@ -20,7 +20,7 @@ class NiiDataset:
             for x in os.listdir(root_dir)
             if x.endswith(".nii") or x.endswith(".nii.gz")])
         # use regular expression to accomodate both .nii and .nii.gz
-        self.pid_list = [re.sub("(\.nii)|(\.gz)|(-label)", "",
+        self.pid_list = [re.sub(r"(\.nii)|(\.gz)|(-label)", "",
             os.path.basename(x)) for x in self.file_list]
 
     def __len__(self):
