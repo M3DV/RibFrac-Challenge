@@ -1,11 +1,9 @@
 import os
-import time
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from skimage.measure import label, regionprops
-from sklearn.metrics import auc
 from tqdm import tqdm
 
 from nii_dataset import NiiDataset
