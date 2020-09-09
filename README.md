@@ -62,10 +62,11 @@ The prediction info .csv should have four columns: ```public_id``` (patient ID),
 |public_id|label_id|confidence|label_code|
 |-|-|-|-|
 |RibFrac421|0|0.5|0|
+|RibFrac421|1|0.5|2|
+|RibFrac422|0|0.5|0|
 |RibFrac422|1|0.5|3|
-|RibFrac423|2|0.5|1|
 |...||||
-|RibFrac499|0|0.5|0|
+|RibFrac500|0|0.5|0|
 |RibFrac500|1|0.5|3|
 
 For each public_id, there should be at least one row representing the background class. Similar to the ground-truth info .csv, the background record should have ```label_id=0``` and ```label_code=0```. Other than that, each row in the classification prediction .csv represents one predicted fracture area. The public_id should be in the same format as in .nii file names.
