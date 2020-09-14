@@ -93,8 +93,17 @@ def _calculate_f1(conf_matrix):
 
     Returns
     -------
-    f1_score : float
-        Classification macro F1 score.
+    f1_total : float
+        Total classification macro F1 score including detection FP and FN.
+    f1_target : float
+        Classification macro F1 score excluding detection FP.
+        This metric is target-aware, meaning that it only takes GT
+        classification into account.
+    f1_pred : float
+        Classification macro F1 score exculding both detection FP and FN.
+        This metric is prediction-aware, meaning that it calculates
+        classification F1 solely on TP prediction thus completely decouples
+        detection and classification.
     """
     conf_matrix_wo_ignore = conf_matrix.values[:, :-1]
     tp = np.diag(conf_matrix_wo_ignore)[:-1]
@@ -103,11 +112,24 @@ def _calculate_f1(conf_matrix):
         for i in range(conf_matrix_wo_ignore.shape[0] - 1)])
     fn = np.array([conf_matrix_wo_ignore[:, i].sum() - tp[i]
         for i in range(conf_matrix_wo_ignore.shape[0] - 1)])
+
+    # calculate total F1
     precision = tp / (tp + fp + 1e-8)
     recall = tp / (tp + fn + 1e-8)
-    f1_score = np.mean((2 * precision * recall) / (precision + recall + 1e-8))
+    f1_total = np.mean((2 * precision * recall) / (precision + recall + 1e-8))
 
-    return f1_score
+    # calculate target-aware F1 which excludes detection FP
+    precision = tp / (tp + (fp - conf_matrix_wo_ignore[:-1, -1]) + 1e-8)
+    recall = tp / (tp + fn + 1e-8)
+    f1_target = np.mean((2 * precision * recall)\
+        / (precision + recall + 1e-8))
+
+    # calculate prediction-aware F1 which excludes both detection FP and FN
+    precision = tp / (tp + (fp - conf_matrix_wo_ignore[:-1, -1]) + 1e-8)
+    recall = tp / (tp + (fn - conf_matrix_wo_ignore[-1, :-1]) + 1e-8)
+    f1_pred = np.mean((2 * precision * recall) / (precision + recall + 1e-8))
+
+    return f1_total, f1_target, f1_pred
 
 
 def _compile_pred_metrics(iou_matrix, gt_info, pred_info):
@@ -491,7 +513,7 @@ def evaluate(gt_dir, pred_dir):
     fp, recall, key_recall, avg_recall = froc(det_results, num_gts)
 
     # calculate the classification macro F1
-    clf_f1 = _calculate_f1(clf_conf_mat)
+    f1_total, f1_target, f1_pred = _calculate_f1(clf_conf_mat)
 
     eval_results = {
         "detection": {
@@ -502,7 +524,9 @@ def evaluate(gt_dir, pred_dir):
         },
         "classification": {
             "confusion_matrix": clf_conf_mat,
-            "macro_average_F1": clf_f1
+            "macro_average_F1": f1_total,
+            "target_aware_F1": f1_target,
+            "prediction_aware_F1": f1_pred
         }
     }
 
@@ -535,6 +559,12 @@ if __name__ == "__main__":
         print(eval_results["classification"]["confusion_matrix"])
         print("Macro-average F1: {:.4f}".format(
             eval_results["classification"]["macro_average_F1"]))
+        print("Target-aware F1: {:.4f}".format(
+            eval_results["classification"]["target_aware_F1"])
+        )
+        print("Prediction-aware F1: {:.4F}".format(
+            eval_results["classification"]["prediction_aware_F1"])
+        )
 
         # plot FROC curve
         plot_froc(eval_results["detection"]["fp"],
@@ -548,3 +578,9 @@ if __name__ == "__main__":
         print("=" * 64)
         print("Macro-average F1: {:.4f}".format(
             eval_results["classification"]["macro_average_F1"]))
+        print("Target-aware F1: {:.4f}".format(
+            eval_results["classification"]["target_aware_F1"])
+        )
+        print("Prediction-aware F1: {:.4F}".format(
+            eval_results["classification"]["prediction_aware_F1"])
+        )
