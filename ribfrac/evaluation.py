@@ -210,6 +210,18 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
     -------
     pred_metrics : pandas.DataFrame
         A dataframe of prediction metrics.
+    num_gt : int
+        Number of GT in this case.
+    clf_conf_mat : pandas.DataFrame
+        Classification confusion matrix.
+    inter_sum : int
+        Number of gt-pred intersection voxels.
+    union_sum : int
+        Number of gt-pred union voxels.
+    y_true_sum : int
+        Number of GT voxels.
+    y_pred_sum : int
+        Number of prediction voxels.
     """
     gt_label = gt_label.astype(np.uint8)
     pred_label = pred_label.astype(np.uint8)
@@ -226,8 +238,14 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
     # and confusion matrix
     if num_pred == 0:
         pred_metrics = pd.DataFrame()
-        return pred_metrics, num_gt,\
-            _get_clf_confusion_matrix(gt_info, pred_metrics)
+        clf_conf_mat = _get_clf_confusion_matrix(gt_info, pred_metrics)
+        inter_sum = 0
+        union_sum = (gt_label > 0).sum()
+        y_true_sum = union_sum
+        y_pred_sum = 0
+
+        return pred_metrics, num_gt, clf_conf_mat, inter_sum, union_sum,\
+            y_true_sum, y_pred_sum
 
     # if GT is empty
     if num_gt == 0:
@@ -247,8 +265,14 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
             {"label_code": "pred_class", "confidence": "prob"}, axis=1,
             inplace=True)
         pred_metrics.drop(["label_id"], axis=1, inplace=True)
-        return pred_metrics, num_gt, _get_clf_confusion_matrix(gt_info,
-            pred_metrics)
+        clf_conf_mat = _get_clf_confusion_matrix(gt_info, pred_metrics)
+        inter_sum = 0
+        union_sum = (pred_label > 0).sum()
+        y_true_sum = 0
+        y_pred_sum = union_sum
+
+        return pred_metrics, num_gt, clf_conf_mat, inter_sum, union_sum,\
+            y_true_sum, y_pred_sum
 
     # binarize the GT and prediction
     gt_bin = (gt_label > 0).astype(np.uint8)
@@ -281,8 +305,13 @@ def evaluate_single_prediction(gt_label, pred_label, gt_info, pred_info):
     iou_matrix = iou_matrix.T
     pred_metrics, clf_conf_mat = _compile_pred_metrics(iou_matrix,
         gt_info, pred_info)
+    inter_sum = intersection.sum()
+    union_sum = (union > 0).sum()
+    y_true_sum = gt_bin.sum()
+    y_pred_sum = pred_bin.sum()
 
-    return pred_metrics, num_gt, clf_conf_mat
+    return pred_metrics, num_gt, clf_conf_mat, inter_sum, union_sum,\
+        y_true_sum, y_pred_sum
 
 
 def _froc_single_thresh(df_list, num_gts, p_thresh, iou_thresh):
@@ -445,6 +474,31 @@ def plot_froc(fp, recall):
     plt.savefig("froc.jpg")
 
 
+def _cal_seg_metrics(seg_results):
+    """
+    Calculate segmentation DICE score and IoU.
+
+    Parameters
+    ----------
+    seg_results : list of tuple
+        List of tuples containing intersection, gt sum and prediction sum
+        of segmentation.
+
+    Returns
+    -------
+    dice : float
+        Segmentation DICE score.
+    iou : float
+        Segmentation IoU score.
+    """
+    inter, union, y_true_sum, y_pred_sum = np.array(seg_results).sum(axis=0)\
+        .tolist()
+    dice = (2 * inter) / (y_true_sum + y_pred_sum + 1e-8)
+    iou = inter / (union + 1e-8)
+
+    return dice, iou
+
+
 def evaluate(gt_dir, pred_dir):
     """
     Evaluate predictions against the ground-truth.
@@ -509,6 +563,10 @@ def evaluate(gt_dir, pred_dir):
     clf_conf_mat = pd.DataFrame(np.sum([x[2].values for x in eval_results],
         axis=0), index=clf_conf_mat_rows, columns=clf_conf_mat_cols)
 
+    # segmentation results
+    seg_results = np.array([x[3:] for x in eval_results])
+    dice, iou = _cal_seg_metrics(seg_results)
+
     # calculate the detection FROC
     fp, recall, key_recall, avg_recall = froc(det_results, num_gts)
 
@@ -527,6 +585,10 @@ def evaluate(gt_dir, pred_dir):
             "macro_average_F1": f1_total,
             "target_aware_F1": f1_target,
             "prediction_aware_F1": f1_pred
+        },
+        "segmentation": {
+            "dice": dice,
+            "iou": iou
         }
     }
 
@@ -566,6 +628,11 @@ if __name__ == "__main__":
             eval_results["classification"]["prediction_aware_F1"])
         )
 
+        print("\nSegmentation metrics")
+        print("=" * 64)
+        print(f"Dice score: {eval_results['segmentation']['dice']:.4f}")
+        print(f"IoU: {eval_results['segmentation']['iou']:.4f}")
+
         # plot FROC curve
         plot_froc(eval_results["detection"]["fp"],
             eval_results["detection"]["recall"])
@@ -584,3 +651,8 @@ if __name__ == "__main__":
         print("Prediction-aware F1: {:.4F}".format(
             eval_results["classification"]["prediction_aware_F1"])
         )
+
+        print("\nSegmentation metrics")
+        print("=" * 64)
+        print(f"Dice score: {eval_results['segmentation']['dice']:.4f}")
+        print(f"IoU: {eval_results['segmentation']['iou']:.4f}")
