@@ -605,6 +605,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     eval_results = evaluate(args.gt_dir, args.pred_dir)
 
+    # detection metrics
     print("\nDetection metrics")
     print("=" * 64)
     print("Recall at key FP")
@@ -616,7 +617,15 @@ if __name__ == "__main__":
     print("Maximum recall: {:.4f}".format(
         eval_results["detection"]["max_recall"]
     ))
+    # plot/print FROC curve
+    print("FPR, Recall in FROC")
+    for fp, recall in zip(reversed(eval_results["detection"]["fp"]),
+            reversed(eval_results["detection"]["recall"])):
+        print(f"({fp:.8f}, {recall:.8f})")
+    # plot_froc(eval_results["detection"]["fp"],
+    #     eval_results["detection"]["recall"])
 
+    # classification metrics
     print("\nClassification metrics")
     print("=" * 64)
     print("Confusion matrix")
@@ -626,15 +635,12 @@ if __name__ == "__main__":
     print("Target-aware F1: {:.4f}".format(
         eval_results["classification"]["target_aware_F1"])
     )
-    print("Prediction-aware F1: {:.4F}".format(
+    print("Prediction-aware F1: {:.4f}".format(
         eval_results["classification"]["prediction_aware_F1"])
     )
 
+    # segmentation metrics
     print("\nSegmentation metrics")
     print("=" * 64)
     print(f"Dice score: {eval_results['segmentation']['dice']:.4f}")
     print(f"IoU: {eval_results['segmentation']['iou']:.4f}")
-
-    # plot FROC curve
-    plot_froc(eval_results["detection"]["fp"],
-        eval_results["detection"]["recall"])
