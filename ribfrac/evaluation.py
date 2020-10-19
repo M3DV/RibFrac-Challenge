@@ -578,7 +578,8 @@ def evaluate(gt_dir, pred_dir):
             "fp": fp,
             "recall": recall,
             "key_recall": key_recall,
-            "average_recall": avg_recall
+            "average_recall": avg_recall,
+            "max_recall": max(recall)
         },
         "classification": {
             "confusion_matrix": clf_conf_mat,
@@ -601,58 +602,39 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gt_dir", required=True)
     parser.add_argument("--pred_dir", required=True)
-    parser.add_argument("--offline", default="True")
     args = parser.parse_args()
     eval_results = evaluate(args.gt_dir, args.pred_dir)
 
-    if eval(args.offline):
-        print("\nDetection metrics")
-        print("=" * 64)
-        print("Recall at key FP")
-        print(pd.DataFrame(np.array(eval_results["detection"]["key_recall"])\
-            .reshape(1, -1), index=["Recall"],
-            columns=[f"FP={str(x)}" for x in DEFAULT_KEY_FP]))
-        print("Average recall: {:.4f}".format(
-            eval_results["detection"]["average_recall"]))
+    print("\nDetection metrics")
+    print("=" * 64)
+    print("Recall at key FP")
+    print(pd.DataFrame(np.array(eval_results["detection"]["key_recall"])\
+        .reshape(1, -1), index=["Recall"],
+        columns=[f"FP={str(x)}" for x in DEFAULT_KEY_FP]))
+    print("Average recall: {:.4f}".format(
+        eval_results["detection"]["average_recall"]))
+    print("Maximum recall: {:.4f}".format(
+        eval_results["detection"]["max_recall"]
+    ))
 
-        print("\nClassification metrics")
-        print("=" * 64)
-        print("Confusion matrix")
-        print(eval_results["classification"]["confusion_matrix"])
-        print("Macro-average F1: {:.4f}".format(
-            eval_results["classification"]["macro_average_F1"]))
-        print("Target-aware F1: {:.4f}".format(
-            eval_results["classification"]["target_aware_F1"])
-        )
-        print("Prediction-aware F1: {:.4F}".format(
-            eval_results["classification"]["prediction_aware_F1"])
-        )
+    print("\nClassification metrics")
+    print("=" * 64)
+    print("Confusion matrix")
+    print(eval_results["classification"]["confusion_matrix"])
+    print("Macro-average F1: {:.4f}".format(
+        eval_results["classification"]["macro_average_F1"]))
+    print("Target-aware F1: {:.4f}".format(
+        eval_results["classification"]["target_aware_F1"])
+    )
+    print("Prediction-aware F1: {:.4F}".format(
+        eval_results["classification"]["prediction_aware_F1"])
+    )
 
-        print("\nSegmentation metrics")
-        print("=" * 64)
-        print(f"Dice score: {eval_results['segmentation']['dice']:.4f}")
-        print(f"IoU: {eval_results['segmentation']['iou']:.4f}")
+    print("\nSegmentation metrics")
+    print("=" * 64)
+    print(f"Dice score: {eval_results['segmentation']['dice']:.4f}")
+    print(f"IoU: {eval_results['segmentation']['iou']:.4f}")
 
-        # plot FROC curve
-        plot_froc(eval_results["detection"]["fp"],
-            eval_results["detection"]["recall"])
-    else:
-        print("Detection metrics")
-        print("=" * 64)
-        print("Average recall: {:.4f}".format(
-            eval_results["detection"]["average_recall"]))
-        print("\nClassification metrics")
-        print("=" * 64)
-        print("Macro-average F1: {:.4f}".format(
-            eval_results["classification"]["macro_average_F1"]))
-        print("Target-aware F1: {:.4f}".format(
-            eval_results["classification"]["target_aware_F1"])
-        )
-        print("Prediction-aware F1: {:.4F}".format(
-            eval_results["classification"]["prediction_aware_F1"])
-        )
-
-        print("\nSegmentation metrics")
-        print("=" * 64)
-        print(f"Dice score: {eval_results['segmentation']['dice']:.4f}")
-        print(f"IoU: {eval_results['segmentation']['iou']:.4f}")
+    # plot FROC curve
+    plot_froc(eval_results["detection"]["fp"],
+        eval_results["detection"]["recall"])
