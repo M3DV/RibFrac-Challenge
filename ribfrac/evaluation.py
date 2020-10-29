@@ -579,7 +579,8 @@ def evaluate(gt_dir, pred_dir):
             "recall": recall,
             "key_recall": key_recall,
             "average_recall": avg_recall,
-            "max_recall": max(recall)
+            "max_recall": max(recall),
+            "average_fp_at_max_recall": max(fp),
         },
         "classification": {
             "confusion_matrix": clf_conf_mat,
@@ -616,6 +617,9 @@ if __name__ == "__main__":
         eval_results["detection"]["average_recall"]))
     print("Maximum recall: {:.4f}".format(
         eval_results["detection"]["max_recall"]
+    ))
+    print("Average FP per scan at maximum recall: {:.4f}".format(
+        eval_results["detection"]["average_fp_at_max_recall"]
     ))
     # plot/print FROC curve
     print("FPR, Recall in FROC")
