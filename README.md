@@ -2,7 +2,8 @@
 
 Evaluation scripts for [MICCAI 2020 RibFrac Challenge: Rib Fracture Detection and Classification](https://ribfrac.grand-challenge.org/).
 
-The "legacy" branch is the evaluation code for the official challenge evaluation before Oct 4, 2020, where fewer evaluation metrics are available. 
+* The "master" branch is evaluation code for the online evaluation at present. 
+* The "legacy" branch is the evaluation code for the official MICCAI 2020 challenge evaluation before Oct 4, 2020, where fewer evaluation metrics are available. 
 
 # Content
 
