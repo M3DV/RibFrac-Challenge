@@ -583,9 +583,9 @@ def evaluate(gt_dir, pred_dir):
         },
         "classification": {
             "confusion_matrix": clf_conf_mat,
-            "macro_average_F1": f1_total,
-            "target_aware_F1": f1_target,
-            "prediction_aware_F1": f1_pred
+            "macro_average_F1": f1_total, # the overall classification performance
+            "target_aware_F1": f1_target, # the target-aware classification performance excluding FPs
+            "prediction_aware_F1": f1_pred # the predictiokn-aware classification performance excluding both FPs and FNs
         },
         "segmentation": {
             "dice": dice,
