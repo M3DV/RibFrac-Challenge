@@ -17,6 +17,8 @@ RibFrac-Challenge/
 
 # Setup
 
+## Install required packages
+
 Run the following in command line to install the required packages. First create a specific Anaconda environment and activate it:
 ```bash
 conda create -n ribfrac python=3.7
@@ -25,6 +27,13 @@ conda activate ribfrac
 And then install required packages using pip:
 ```bash
 pip install -r requirements.txt
+```
+
+## Install this repo as a package (optional)
+
+You can also install this repository as a package in your environment if you want to:
+```bash
+python setup.py install
 ```
 
 # Usage
@@ -78,5 +87,5 @@ You could refer to submission samples for the [validation set](https://drive.goo
 
 After setting all of the above, you can evaluate your prediction through the following command line:
 ```bash
-python ribfrac/evaluation.py --gt_dir <ground_truth_directory> --pred_dir <prediction_directory>
+python -m ribfrac.evaluation --gt_dir <ground_truth_directory> --pred_dir <prediction_directory>
 ```
