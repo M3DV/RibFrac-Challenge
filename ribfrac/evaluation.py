@@ -584,9 +584,13 @@ def evaluate(gt_dir, pred_dir):
         },
         "classification": {
             "confusion_matrix": clf_conf_mat,
-            "macro_average_F1": f1_total, # the overall classification performance
-            "target_aware_F1": f1_target, # the target-aware classification performance excluding FPs
-            "prediction_aware_F1": f1_pred # the predictiokn-aware classification performance excluding both FPs and FNs
+            # the overall classification performance
+            "macro_average_F1": f1_total,
+            # the target-aware classification performance excluding FPs
+            "target_aware_F1": f1_target,
+            # the predictiokn-aware classification performance
+            # excluding both FPs and FNs
+            "prediction_aware_F1": f1_pred 
         },
         "segmentation": {
             "dice": dice,
@@ -603,6 +607,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gt_dir", required=True)
     parser.add_argument("--pred_dir", required=True)
+    parser.add_argument("--clf", default=True)
     args = parser.parse_args()
     eval_results = evaluate(args.gt_dir, args.pred_dir)
 
@@ -629,19 +634,20 @@ if __name__ == "__main__":
     # plot_froc(eval_results["detection"]["fp"],
     #     eval_results["detection"]["recall"])
 
-    # classification metrics
-    print("\nClassification metrics")
-    print("=" * 64)
-    print("Confusion matrix")
-    print(eval_results["classification"]["confusion_matrix"])
-    print("Macro-average F1: {:.4f}".format(
-        eval_results["classification"]["macro_average_F1"]))
-    print("Target-aware F1: {:.4f}".format(
-        eval_results["classification"]["target_aware_F1"])
-    )
-    print("Prediction-aware F1: {:.4f}".format(
-        eval_results["classification"]["prediction_aware_F1"])
-    )
+    if args.clf:
+        # classification metrics
+        print("\nClassification metrics")
+        print("=" * 64)
+        print("Confusion matrix")
+        print(eval_results["classification"]["confusion_matrix"])
+        print("Macro-average F1: {:.4f}".format(
+            eval_results["classification"]["macro_average_F1"]))
+        print("Target-aware F1: {:.4f}".format(
+            eval_results["classification"]["target_aware_F1"])
+        )
+        print("Prediction-aware F1: {:.4f}".format(
+            eval_results["classification"]["prediction_aware_F1"])
+        )
 
     # segmentation metrics
     print("\nSegmentation metrics")
