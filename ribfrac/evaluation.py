@@ -643,11 +643,9 @@ if __name__ == "__main__":
         print("Macro-average F1: {:.4f}".format(
             eval_results["classification"]["macro_average_F1"]))
         print("Target-aware F1: {:.4f}".format(
-            eval_results["classification"]["target_aware_F1"])
-        )
+            eval_results["classification"]["target_aware_F1"]))
         print("Prediction-aware F1: {:.4f}".format(
-            eval_results["classification"]["prediction_aware_F1"])
-        )
+            eval_results["classification"]["prediction_aware_F1"]))
 
     # segmentation metrics
     print("\nSegmentation metrics")
