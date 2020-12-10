@@ -607,7 +607,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gt_dir", required=True)
     parser.add_argument("--pred_dir", required=True)
-    parser.add_argument("--clf", default=True)
+    parser.add_argument("--clf", default="True")
     args = parser.parse_args()
     eval_results = evaluate(args.gt_dir, args.pred_dir)
 
@@ -634,7 +634,7 @@ if __name__ == "__main__":
     # plot_froc(eval_results["detection"]["fp"],
     #     eval_results["detection"]["recall"])
 
-    if args.clf:
+    if args.clf == "True":
         # classification metrics
         print("\nClassification metrics")
         print("=" * 64)
